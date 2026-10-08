@@ -1,0 +1,101 @@
+order_id,order_date,customer_id,customer_segment,region,product_category,product_name,units_sold,unit_price,discount,revenue,profit,return_status
+ORD-1001,2024-01-15,CUST-201,Corporate,North,Electronics,Wireless Headphones,3,150.00,0.05,427.50,128.25,No
+ORD-1002,2024-01-16,CUST-202,Consumer,South,Furniture,Ergonomic Chair,2,220.00,0.10,396.00,79.20,No
+ORD-1003,2024-01-18,CUST-203,Small Business,East,Office Supplies,Gel Pen Set (20pk),10,15.50,0.00,155.00,62.00,No
+ORD-1004,2024-01-20,CUST-204,Consumer,West,Electronics,4K Gaming Monitor,1,450.00,0.15,382.50,95.60,No
+ORD-1005,2024-01-22,CUST-205,Corporate,North,Furniture,Standing Desk,1,600.00,0.00,600.00,180.00,No
+ORD-1006,2024-01-25,CUST-206,Consumer,East,Technology,USB-C Docking Station,4,85.00,0.05,323.00,96.90,No
+ORD-1007,2024-01-28,CUST-207,Small Business,South,Office Supplies,Heavy Duty Stapler,5,24.00,0.00,120.00,48.00,No
+ORD-1008,2024-02-01,CUST-208,Corporate,West,Technology,Mechanical Keyboard,3,120.00,0.10,324.00,97.20,No
+ORD-1009,2024-02-03,CUST-209,Consumer,North,Furniture,Bookshelf Wood 5-Tier,2,180.00,0.20,288.00,43.20,No
+ORD-1010,2024-02-05,CUST-210,Corporate,East,Electronics,Noise Cancelling Earbuds,5,99.00,0.00,495.00,173.25,No
+ORD-1011,2024-02-08,CUST-211,Consumer,South,Office Supplies,Copy Paper 500 Sheets,12,8.50,0.00,102.00,30.60,No
+ORD-1012,2024-02-12,CUST-212,Small Business,West,Electronics,Webcam HD 1080p,6,65.00,0.05,370.50,111.15,No
+ORD-1013,2024-02-15,CUST-213,Consumer,North,Furniture,Desk Lamp LED,4,45.00,0.00,180.00,72.00,No
+ORD-1014,2024-02-18,CUST-214,Corporate,South,Technology,External SSD 1TB,2,140.00,0.10,252.00,75.60,No
+ORD-1015,2024-02-22,CUST-215,Small Business,East,Furniture,Mesh Office Chair,3,190.00,0.15,484.50,121.10,No
+ORD-1016,2024-02-26,CUST-216,Consumer,West,Electronics,Bluetooth Speaker,2,75.00,0.00,150.00,52.50,Yes
+ORD-1017,2024-03-02,CUST-217,Corporate,North,Office Supplies,Whiteboard 36x24,2,80.00,0.05,152.00,45.60,No
+ORD-1018,2024-03-05,CUST-218,Small Business,South,Technology,Laser Printer All-in-One,1,320.00,0.00,320.00,96.00,No
+ORD-1019,2024-03-09,CUST-219,Consumer,East,Furniture,Executive Leather Chair,1,350.00,0.20,280.00,56.00,No
+ORD-1020,2024-03-12,CUST-220,Corporate,West,Electronics,Smart Watch Series 5,2,250.00,0.10,450.00,135.00,No
+ORD-1021,2024-03-15,CUST-221,Consumer,North,Office Supplies,Binder Clips Bulk Pack,8,12.00,0.00,96.00,38.40,No
+ORD-1022,2024-03-18,CUST-222,Small Business,South,Technology,Wi-Fi 6 Router Pro,3,175.00,0.05,498.75,149.60,No
+ORD-1023,2024-03-21,CUST-223,Corporate,East,Furniture,Conference Table 8ft,1,850.00,0.10,765.00,229.50,No
+ORD-1024,2024-03-25,CUST-224,Consumer,West,Office Supplies,Filing Cabinet 3-Drawer,1,160.00,0.00,160.00,48.00,No
+ORD-1025,2024-03-28,CUST-225,Small Business,North,Electronics,Wireless Mouse Ergonomic,15,35.00,0.10,472.50,141.75,No
+ORD-1026,2024-04-02,CUST-226,Corporate,South,Technology,Monitor Arm Dual Mount,4,95.00,0.05,361.00,108.30,No
+ORD-1027,2024-04-05,CUST-227,Consumer,East,Electronics,Noise Cancelling Earbuds,1,99.00,0.00,99.00,34.65,Yes
+ORD-1028,2024-04-08,CUST-228,Small Business,West,Furniture,Ergonomic Footrest,6,30.00,0.00,180.00,63.00,No
+ORD-1029,2024-04-12,CUST-229,Corporate,North,Office Supplies,Laminator Thermal Machine,2,110.00,0.15,187.00,46.75,No
+ORD-1030,2024-04-16,CUST-230,Consumer,South,Technology,Graphics Tablet 10-inch,1,280.00,0.05,266.00,79.80,No
+ORD-1031,2024-04-19,CUST-231,Corporate,East,Electronics,Surge Protector Strip,10,22.00,0.00,220.00,77.00,No
+ORD-1032,2024-04-22,CUST-232,Consumer,West,Furniture,Standing Mat Anti-Fatigue,3,55.00,0.10,148.50,44.55,No
+ORD-1033,2024-04-26,CUST-233,Small Business,North,Technology,Network Switch 16-Port,2,190.00,0.00,380.00,114.00,No
+ORD-1034,2024-04-30,CUST-234,Corporate,South,Office Supplies,Paper Shredder Cross-Cut,1,210.00,0.20,168.00,33.60,No
+ORD-1035,2024-05-03,CUST-235,Consumer,East,Electronics,Portable Bluetooth Speaker,3,60.00,0.00,180.00,63.00,No
+ORD-1036,2024-05-07,CUST-236,Small Business,West,Furniture,Bookcase 3-Shelf,2,125.00,0.05,237.50,71.25,No
+ORD-1037,2024-05-11,CUST-237,Corporate,North,Technology,Conference Speakerphone,1,299.00,0.00,299.00,104.65,No
+ORD-1038,2024-05-15,CUST-238,,South,Office Supplies,Dry Erase Markers (12pk),15,14.00,0.00,210.00,84.00,No
+ORD-1039,2024-05-18,CUST-239,Consumer,East,Electronics,USB Microphone Podcast,2,130.00,0.10,234.00,70.20,No
+ORD-1040,2024-05-22,CUST-240,Corporate,West,Furniture,Adjustable Laptop Stand,5,42.00,0.00,210.00,73.50,No
+ORD-1041,2024-05-26,CUST-241,Small Business,North,Technology,NAS Storage 2-Bay,1,380.00,0.10,342.00,102.60,No
+ORD-1042,2024-05-30,CUST-242,Consumer,South,Office Supplies,Label Maker Handheld,3,38.00,0.05,108.30,37.90,No
+ORD-1043,2024-06-03,CUST-243,Corporate,East,Electronics,Wireless Presenter Clicker,4,28.00,0.00,112.00,39.20,No
+ORD-1044,2024-06-07,CUST-244,Consumer,West,Furniture,Ergonomic Keyboard Wrist Rest,8,18.00,0.00,144.00,50.40,No
+ORD-1045,2024-06-11,CUST-245,Small Business,North,Technology,Webcam Privacy Cover (3pk),20,9.99,0.00,199.80,99.90,No
+ORD-1046,2024-06-15,CUST-246,Corporate,South,Office Supplies,Desk Organizer Mesh,7,25.00,0.10,157.50,47.25,No
+ORD-1047,2024-06-19,CUST-247,,East,Electronics,Smart Plug Wi-Fi (4pk),5,32.00,0.05,152.00,45.60,No
+ORD-1048,2024-06-23,CUST-248,Consumer,West,Furniture,Office Drafting Stool,1,175.00,0.15,148.75,37.18,No
+ORD-1049,2024-06-27,CUST-249,Small Business,North,Technology,HDMI Cable 10ft (2pk),10,16.00,0.00,160.00,64.00,No
+ORD-1050,2024-06-30,CUST-250,Corporate,South,Electronics,Noise Cancelling Headset,6,110.00,0.10,594.00,178.20,No
+ORD-1051,2024-07-04,CUST-251,Consumer,East,Office Supplies,Heavy Duty Packing Tape,14,6.50,0.00,91.00,31.85,No
+ORD-1052,2024-07-08,CUST-252,Corporate,West,Technology,USB 3.0 Flash Drive 128GB,8,22.00,0.00,176.00,61.60,No
+ORD-1053,2024-07-12,CUST-253,Small Business,North,Furniture,Mobile File Cabinet,2,145.00,0.05,275.50,68.88,No
+ORD-1054,2024-07-16,CUST-254,Consumer,South,Electronics,Ring Light Tripod Kit,3,48.00,0.10,129.60,38.88,Yes
+ORD-1055,2024-07-20,CUST-255,Corporate,East,Technology,Smart Surge Protector,4,39.00,0.00,156.00,46.80,No
+ORD-1056,2024-07-24,CUST-256,Small Business,West,Office Supplies,Correction Tape (10pk),12,11.00,0.00,132.00,52.80,No
+ORD-1057,2024-07-28,CUST-257,Consumer,North,Furniture,Ergonomic Cushion Memory Foam,4,35.00,0.00,140.00,49.00,No
+ORD-1058,2024-08-01,CUST-258,Corporate,South,Electronics,4K Video Bar Conference,1,899.00,0.05,854.05,256.20,No
+ORD-1059,2024-08-05,CUST-259,Small Business,East,Technology,Barcode Scanner Wireless,3,89.00,0.10,240.30,72.10,No
+ORD-1060,2024-08-09,CUST-260,Consumer,West,Furniture,Under-Desk Keyboard Tray,2,65.00,0.00,130.00,45.50,No
+ORD-1061,2024-08-13,CUST-261,Corporate,North,Office Supplies,Business Card Scanner,1,195.00,0.15,165.75,41.40,No
+ORD-1062,2024-08-17,CUST-262,Small Business,South,Electronics,Compact Projector 1080p,1,340.00,0.00,340.00,102.00,No
+ORD-1063,2024-08-21,CUST-263,Consumer,East,Technology,Cat6 Ethernet Cable 50ft,6,18.00,0.00,108.00,43.20,No
+ORD-1064,2024-08-25,CUST-264,Corporate,West,Furniture,Office Privacy Screen,2,115.00,0.10,207.00,62.10,No
+ORD-1065,2024-08-29,CUST-265,Consumer,North,Office Supplies,Desk Pad Blotter Leather,5,28.00,0.05,133.00,46.55,No
+ORD-1066,2024-09-02,CUST-266,Small Business,South,Technology,Thermal Receipt Printer,2,160.00,0.00,320.00,96.00,No
+ORD-1067,2024-09-06,CUST-267,Corporate,East,Electronics,Laser Pointer Rechargeable,6,19.99,0.00,119.94,47.98,No
+ORD-1068,2024-09-10,CUST-268,Consumer,West,Furniture,Cable Management Tray,4,22.00,0.00,88.00,35.20,No
+ORD-1069,2024-09-14,CUST-269,Small Business,North,Office Supplies,Expanding File Folder,10,14.50,0.10,130.50,39.15,No
+ORD-1070,2024-09-18,CUST-270,Corporate,South,Technology,Dual Band Wi-Fi Adapter,7,29.99,0.00,209.93,73.47,No
+ORD-1071,2024-09-22,CUST-271,Consumer,East,Electronics,Digital Voice Recorder,2,79.00,0.05,150.10,45.03,No
+ORD-1072,2024-09-26,CUST-272,Small Business,West,Furniture,Adjustable Footstool,3,44.00,0.00,132.00,46.20,No
+ORD-1073,2024-09-30,CUST-273,Corporate,North,Technology,Multiport USB-C Hub,5,45.00,0.10,202.50,60.75,No
+ORD-1074,2024-10-04,CUST-274,Consumer,South,Office Supplies,Gel Pen Refills (30pk),12,9.50,0.00,114.00,45.60,No
+ORD-1075,2024-10-08,CUST-275,Small Business,East,Electronics,Surge Protector 12-Outlet,4,34.00,0.00,136.00,47.60,No
+ORD-1076,2024-10-12,CUST-276,Corporate,West,Furniture,Ergonomic Desk Chair,4,240.00,0.15,816.00,204.00,No
+ORD-1077,2024-10-16,CUST-277,Consumer,North,Technology,Screen Cleaning Kit,15,11.50,0.00,172.50,69.00,No
+ORD-1078,2024-10-20,CUST-278,Small Business,South,Office Supplies,Dry Erase Board Cleaner,8,8.00,0.00,64.00,25.60,No
+ORD-1079,2024-10-24,CUST-279,Corporate,East,Electronics,Wireless Charging Stand,6,35.00,0.05,199.50,59.85,No
+ORD-1080,2024-10-28,CUST-280,Consumer,West,Furniture,Balance Ball Chair,1,85.00,0.00,85.00,29.75,No
+ORD-1081,2024-11-01,CUST-281,Small Business,North,Technology,Wireless Mouse Vertical,5,42.00,0.10,189.00,56.70,No
+ORD-1082,2024-11-05,CUST-282,Corporate,South,Office Supplies,Heavy Duty Hole Punch,3,32.00,0.00,96.00,33.60,No
+ORD-1083,2024-11-09,CUST-283,Consumer,East,Electronics,Noise Isolating Earphones,4,25.00,0.00,100.00,40.00,No
+ORD-1084,2024-11-13,CUST-284,Small Business,West,Furniture,Corner Desk Connector,1,110.00,0.20,88.00,17.60,No
+ORD-1085,2024-11-17,CUST-285,Corporate,North,Technology,Document Camera HD,2,210.00,0.10,378.00,113.40,No
+ORD-1086,2024-11-21,CUST-286,Consumer,South,Office Supplies,Sticky Notes Value Pack,18,5.50,0.00,99.00,39.60,No
+ORD-1087,2024-11-25,CUST-287,Small Business,East,Electronics,Bluetooth Audio Adapter,3,29.00,0.00,87.00,30.45,No
+ORD-1088,2024-11-29,CUST-288,Corporate,West,Furniture,Task Chair Low Back,3,130.00,0.05,370.50,92.60,No
+ORD-1089,2024-12-03,CUST-289,Consumer,North,Technology,External Hard Drive 2TB,2,95.00,0.00,190.00,57.00,No
+ORD-1090,2024-12-07,CUST-290,Small Business,South,Office Supplies,File Storage Boxes (12pk),4,42.00,0.10,151.20,45.36,No
+ORD-1091,2024-12-11,CUST-291,Corporate,East,Electronics,Conference Microphone Array,2,310.00,0.10,558.00,167.40,No
+ORD-1092,2024-12-15,CUST-292,Consumer,West,Furniture,Lumbar Support Pillow,5,28.00,0.00,140.00,49.00,No
+ORD-1093,2024-12-19,CUST-293,Small Business,North,Technology,Ethernet Patch Panel 24-Port,1,75.00,0.00,75.00,26.25,No
+ORD-1094,2024-12-23,CUST-294,Corporate,South,Office Supplies,Electric Pencil Sharpener,4,26.00,0.05,98.80,34.58,No
+ORD-1095,2024-12-27,CUST-295,Consumer,East,Electronics,Smart Power Strip,3,36.00,0.00,108.00,37.80,No
+ORD-1096,2024-12-28,CUST-296,Corporate,West,Technology,Enterprise Server Rack Blade,12,1850.00,0.08,20424.00,7148.40,No
+ORD-1097,2024-12-29,CUST-297,Corporate,East,Furniture,Luxury Executive Boardroom Set,8,3200.00,0.12,22528.00,5632.00,No
+ORD-1098,2024-12-30,CUST-298,Consumer,North,Electronics,Basic USB Cable 3ft,1,4.99,0.00,4.99,1.50,No
+ORD-1099,2024-12-31,CUST-299,Consumer,South,Office Supplies,Eraser 2-Pack,2,1.99,0.00,3.98,1.20,No
+ORD-1099,2024-12-31,CUST-299,Consumer,South,Office Supplies,Eraser 2-Pack,2,1.99,0.00,3.98,1.20,No
