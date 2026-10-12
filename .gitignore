@@ -52,7 +52,11 @@ venv.bak/
 # OS generated files
 .DS_Store
 Thumbs.db
+desktop.ini
 
 # InsightAI reports and temporary artifacts
 reports/output/
 scratch/
+
+# Test caches
+.pytest_cache/

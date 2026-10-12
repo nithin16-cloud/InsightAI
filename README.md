@@ -1,120 +1,156 @@
-# ⚡ InsightAI — Intelligent Data Analyst & Automated Profiler
+# InsightAI
 
-[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
-[![Streamlit](https://img.shields.io/badge/Streamlit-1.36+-FF4B4B.svg)](https://streamlit.io/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+**Intelligent Tabular Data Analytics Platform**
 
-> **Core Principle:** The LLM plans and explains; Python executes deterministic calculations. Zero hallucinations on verified data.
+InsightAI is a production-ready analytics tool that transforms raw CSV files into structured insights without hallucination or black-box guesswork. Every result is produced through deterministic Python execution — no LLM-generated conclusions, no random outputs.
 
 ---
 
-## 🌟 Overview
-**InsightAI** is an AI-powered data analysis platform that transforms raw tabular datasets (CSV) into verified insights. Users can upload any CSV, inspect automated profiling metrics, run natural language analysis plans, discover anomalies with Isolation Forest, and download executive HTML reports.
+## What it Does
+
+- **Automated Data Profiling** — Column-level statistics, missing value rates, cardinality, type inference, and a composite health score in seconds
+- **Data Hygiene** — Safe, non-destructive deduplication and imputation; original data is always preserved
+- **Natural Language Query Interface** — Ask questions in plain English ("What is the total revenue by region?") and get exact, auditable answers
+- **ML Anomaly Detection** — Isolation Forest detects genuine multivariate outliers with per-record explanations
+- **Executive HTML Reports** — Download standalone, print-quality HTML reports with full profiling and anomaly summaries
 
 ---
 
-## 🏗️ Architecture
-```
-User (Streamlit UI)
-      │
-      ▼
-CSV Validation & Ingestion (Size & Format Check, Encoding / Delimiter Safety)
-      │
-      ▼
-Automated Data Profiler (Missing Values, Dtypes, Stats, Correlations)
-      │
-      ▼
-Natural Language Query Router
-      │
-      ▼
-Structured LLM Planner (Strict JSON Schema)
-      │
-      ▼
-Plan Validator (Allow-list Check & Column Safety — No Arbitrary Code Execution)
-      │
-      ▼
-Deterministic Pandas Executor
-      │
-      ├───────────────────────┬───────────────────────┐
-      ▼                       ▼                       ▼
-Interactive Plotly Charts  Grounded LLM Explanations  Isolation Forest ML Anomalies
-      └───────────────────────┬───────────────────────┘
-                              ▼
-                 Downloadable Executive HTML Report
-```
+## Technology Stack
+
+| Layer | Technology |
+|---|---|
+| Interface | Streamlit 1.36+ |
+| Data | pandas 2.2+ / NumPy 1.26+ |
+| Machine Learning | scikit-learn 1.4+ (Isolation Forest) |
+| Visualisation | Plotly 5.22+ |
+| LLM (optional) | OpenAI API (GPT-4o) for enhanced query planning |
+| Fonts | Plus Jakarta Sans, JetBrains Mono via Google Fonts |
 
 ---
 
-## 🚀 Features (Day 1)
-- **Robust CSV Validation Engine:**
-  - Automatic delimiter detection (`,`, `;`, `\t`, `|`).
-  - Encoding detection (`utf-8`, `latin1`, etc.).
-  - File size protection (up to 50MB) and malformed record handling.
-- **Deep Tabular Profiler:**
-  - Full dataset metadata: shape, memory footprint, duplicate rows, missing values.
-  - Column-by-column semantic typing (numeric, categorical, datetime, boolean).
-  - Descriptive statistics (mean, median, standard deviation, percentiles, min/max).
-  - Pearson correlation matrix heatmap for numeric features.
-- **Interactive Modern Streamlit UI:**
-  - Premium glassmorphic interface with reactive metrics.
-  - Interactive distribution histograms, box plots, and bar charts.
-  - Built-in data hygiene utilities (deduplication & missing value imputation).
-  - Preloaded demo sales analytics dataset (`data/sample_sales.csv`).
+## Getting Started
 
----
+### Prerequisites
 
-## 📂 Project Structure
-```text
-InsightAI/
-├── app.py                  # Streamlit web application entry point
-├── requirements.txt        # Python dependencies
-├── .env.example            # Environment variables template
-├── .gitignore              # Ignored files & secrets
-├── README.md               # Project documentation
-├── data/
-│   ├── sample.csv          # Standard sample dataset
-│   └── sample_sales.csv    # 100-row demo sales dataset with outliers & missing values
-├── src/
-│   ├── __init__.py
-│   ├── validator.py        # CSV integrity, encoding, and size validation
-│   ├── profiler.py         # Automated data profiling engine
-│   └── cleaner.py          # Deduplication & missing value imputation
-└── tests/
-    └── test_day1.py        # Unit test suite for validation and profiler
-```
+- Python 3.10 or higher
+- pip
 
----
+### Installation
 
-## 🛠️ Local Quickstart
-
-### 1. Clone & Set Up
 ```bash
-git clone https://github.com/nithin16-cloud/InsightAI.git
+# Clone the repository
+git clone https://github.com/your-username/InsightAI.git
 cd InsightAI
-```
 
-### 2. Install Dependencies
-```bash
+# Create and activate a virtual environment
+python -m venv .venv
+.venv\Scripts\activate          # Windows
+# source .venv/bin/activate     # macOS / Linux
+
+# Install dependencies
 pip install -r requirements.txt
 ```
 
-### 3. Run Tests
+### Environment Variables (Optional)
+
+OpenAI integration is entirely optional. The platform runs fully offline without it.
+
 ```bash
-python -m pytest tests/test_day1.py
+# Copy the example file
+cp .env.example .env
+
+# Then edit .env and paste your key:
+# OPENAI_API_KEY=sk-...
 ```
 
-### 4. Launch Application
+### Run Locally
+
 ```bash
-python -m streamlit run app.py
+streamlit run app.py
 ```
-Open [http://localhost:8501](http://localhost:8501) in your browser.
+
+The app opens at `http://localhost:8501`.
 
 ---
 
-## 📅 6-Day Development Roadmap
-- [x] **Day 1: Project Setup, CSV Ingestion, Profiler & Streamlit Interface**
-- [ ] **Day 2: Deterministic Pandas Analysis Engine & Plotly Visualizer**
-- [ ] **Day 3: LLM Planning Layer, JSON Schema Validation & Explanations**
-- [ ] **Day 4: Isolation Forest Machine Learning Anomaly Detection**
-- [ ] **Day 5: Downloadable Executive HTML Reports & Security Hardening**
-- [ ] **Day 6: Cloud Deployment, End-to-End Testing & Portfolio Assets**
+## Deployment
+
+### Streamlit Community Cloud (Recommended)
+
+1. Push this repository to GitHub
+2. Visit [share.streamlit.io](https://share.streamlit.io)
+3. Connect your repo and set the main file to `app.py`
+4. Add `OPENAI_API_KEY` to Secrets (optional)
+
+### Render / Heroku
+
+A `Procfile` is included. Connect your repo, set the build command to `pip install -r requirements.txt`, and deploy.
+
+### Docker
+
+```dockerfile
+FROM python:3.11-slim
+WORKDIR /app
+COPY . .
+RUN pip install -r requirements.txt
+EXPOSE 8501
+CMD ["streamlit", "run", "app.py", "--server.headless=true", "--server.address=0.0.0.0"]
+```
+
+---
+
+## Project Structure
+
+```
+InsightAI/
+├── .env.example                # Environment variables template
+├── .gitignore                  # Git exclusions
+├── .streamlit/
+│   └── config.toml             # Streamlit server and theme config
+├── Procfile                    # Cloud deployment entry point
+├── README.md                   # This file
+├── requirements.txt            # Production dependencies
+├── setup.cfg                   # Package metadata and test settings
+├── app.py                      # Main application entry point
+├── data/
+│   └── sample_sales.csv        # Demo dataset for testing
+├── src/
+│   ├── __init__.py             # Package exports
+│   ├── validator.py            # CSV integrity and security checks
+│   ├── profiler.py             # Automated data profiling engine
+│   ├── cleaner.py              # Deduplication and missing value imputation
+│   ├── executor.py             # Deterministic pandas query engine
+│   ├── planner.py              # Natural language to query router
+│   ├── anomalies.py            # Isolation Forest anomaly detection
+│   └── reporter.py             # Executive HTML report generator
+└── tests/
+    ├── test_day1.py            # Validation and profiling unit tests
+    └── test_full_suite.py      # End-to-end integration test suite
+```
+
+---
+
+## Running Tests
+
+```bash
+pip install pytest
+pytest tests/ -v
+```
+
+All tests are deterministic and run offline.
+
+---
+
+## Design Principles
+
+- **Zero Hallucinations** — Every number shown is computed directly from your data using pandas. No LLM is asked to guess or summarise results.
+- **Non-destructive** — The original uploaded file is never modified. Cleaning steps operate on a copy.
+- **Audit-ready** — The query engine logs its exact execution steps, making results fully reproducible.
+- **Privacy-first** — Files are held in memory for the session duration only and never written to disk by default.
+
+---
+
+## License
+
+MIT License. See `LICENSE` for details.
