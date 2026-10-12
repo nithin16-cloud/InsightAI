@@ -1,473 +1,80 @@
-"""
-InsightAI - Executive HTML Report Generator
-Creates self-contained, executive-grade analytical HTML reports.
-Features modern responsive styling, health scorecard, anomaly highlights, and data tables.
-"""
-
-from datetime import datetime
-from typing import Optional, Dict, Any, List
-import pandas as pd
-from src.profiler import DatasetProfile
-from src.anomalies import AnomalyDetectionResult
-
-
-class ExecutiveReporter:
-    """Generates standalone, beautifully formatted executive HTML reports."""
-
-    @staticmethod
-    def calculate_health_score(profile: DatasetProfile, anomaly_result: Optional[AnomalyDetectionResult] = None) -> int:
-        """Calculate a composite 0-100 data health score."""
-        score = 100.0
-
-        # Missing values penalty
-        score -= min(30.0, profile.total_missing_percentage * 2.5)
-
-        # Duplicate rows penalty
-        score -= min(25.0, profile.duplicate_rows_percentage * 3.0)
-
-        # Anomalies penalty
-        if anomaly_result:
-            score -= min(15.0, anomaly_result.outlier_percentage * 1.5)
-
-        return max(10, min(100, int(round(score))))
-
-    @staticmethod
-    def generate_html_report(
-        file_name: str,
-        profile: DatasetProfile,
-        df: pd.DataFrame,
-        anomaly_result: Optional[AnomalyDetectionResult] = None,
-        custom_notes: Optional[str] = None
-    ) -> str:
-        """Generate standalone executive HTML report."""
-        now_str = datetime.now().strftime("%B %d, %Y | %H:%M UTC")
-        health_score = ExecutiveReporter.calculate_health_score(profile, anomaly_result)
-
-        if health_score >= 90:
-            health_badge_class = "health-excellent"
-            health_verdict = "Excellent &mdash; Production Ready"
-        elif health_score >= 75:
-            health_badge_class = "health-good"
-            health_verdict = "Good &mdash; Minor Hygiene Recommended"
-        elif health_score >= 60:
-            health_badge_class = "health-fair"
-            health_verdict = "Fair &mdash; Moderate Quality Issues"
-        else:
-            health_badge_class = "health-poor"
-            health_verdict = "Action Required &mdash; High Noise / Missing Data"
-
-        # Numeric stats rows
-        stats_rows_html = ""
-        if profile.has_numeric_columns:
-            desc = df[profile.numeric_columns].describe().T
-            for col_name, s in desc.iterrows():
-                stats_rows_html += f"""
-                <tr>
-                    <td class="col-name font-mono">{col_name}</td>
-                    <td>{int(s['count']):,}</td>
-                    <td>{s['mean']:,.2f}</td>
-                    <td>{s['std']:,.2f}</td>
-                    <td>{s['min']:,.2f}</td>
-                    <td>{s['50%']:,.2f}</td>
-                    <td>{s['max']:,.2f}</td>
-                </tr>
-                """
-
-        # Schema rows
-        schema_rows_html = ""
-        for col_name, c_prof in profile.columns.items():
-            type_badge = f'<span class="badge badge-{c_prof.semantic_type}">{c_prof.semantic_type.upper()}</span>'
-            schema_rows_html += f"""
-            <tr>
-                <td class="col-name font-mono">{col_name}</td>
-                <td>{type_badge}</td>
-                <td>{c_prof.non_null_count:,}</td>
-                <td>{c_prof.missing_count:,} ({c_prof.missing_percentage}%)</td>
-                <td>{c_prof.unique_count:,}</td>
-            </tr>
-            """
-
-        # Anomaly section HTML
-        anomaly_section_html = ""
-        if anomaly_result and anomaly_result.outliers_detected > 0:
-            anomaly_items_html = ""
-            for item in anomaly_result.top_anomalies_summary:
-                anomaly_items_html += f"""
-                <div class="anomaly-item">
-                    <div class="anomaly-header">
-                        <span class="anomaly-id">{item['record_id']}</span>
-                        <span class="anomaly-score">Severity: {item['anomaly_score']}/100</span>
-                    </div>
-                    <div class="anomaly-desc">{item['explanation']}</div>
-                </div>
-                """
-
-            anomaly_section_html = f"""
-            <div class="card section-card">
-                <div class="section-title">Machine Learning Anomaly Detection (Isolation Forest)</div>
-                <p class="section-desc">Identified <strong>{anomaly_result.outliers_detected}</strong> anomalous records ({anomaly_result.outlier_percentage}% of dataset) exhibiting rare multi-feature divergence.</p>
-                <div class="anomaly-list">
-                    {anomaly_items_html}
-                </div>
-            </div>
-            """
-
-        # HTML template
-        html = f"""<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>InsightAI Executive Report - {file_name}</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <style>
-        :root {{
-            --bg: #0B0F19;
-            --surface: #121826;
-            --surface-elevated: #182234;
-            --border: rgba(255, 255, 255, 0.08);
-            --border-highlight: rgba(99, 102, 241, 0.3);
-            --text-primary: #F8FAFC;
-            --text-secondary: #94A3B8;
-            --text-muted: #64748B;
-            --accent-primary: #6366F1;
-            --accent-gradient: linear-gradient(135deg, #6366F1 0%, #8B5CF6 50%, #EC4899 100%);
-            --good: #10B981;
-            --warn: #F59E0B;
-            --bad: #F43F5E;
-        }}
-        * {{ margin: 0; padding: 0; box-sizing: border-box; }}
-        body {{
-            background-color: var(--bg);
-            color: var(--text-primary);
-            font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
-            line-height: 1.6;
-            padding: 2.5rem 1.5rem;
-        }}
-        .container {{
-            max-width: 1100px;
-            margin: 0 auto;
-        }}
-        .font-mono {{ font-family: 'JetBrains Mono', monospace; }}
-        
-        /* Header */
-        .report-header {{
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
-            padding-bottom: 2rem;
-            border-bottom: 1px solid var(--border);
-            margin-bottom: 2rem;
-        }}
-        .brand-pill {{
-            display: inline-flex;
-            align-items: center;
-            gap: 0.5rem;
-            padding: 0.35rem 0.85rem;
-            border-radius: 9999px;
-            background: rgba(99, 102, 241, 0.15);
-            border: 1px solid rgba(99, 102, 241, 0.3);
-            color: #A5B4FC;
-            font-size: 0.78rem;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.08em;
-            margin-bottom: 0.75rem;
-        }}
-        .report-title {{
-            font-size: 2.2rem;
-            font-weight: 800;
-            letter-spacing: -0.03em;
-            color: #FFFFFF;
-            margin-bottom: 0.3rem;
-        }}
-        .report-subtitle {{
-            color: var(--text-secondary);
-            font-size: 0.95rem;
-        }}
-        .health-card {{
-            text-align: right;
-            background: var(--surface);
-            padding: 1.25rem 1.75rem;
-            border-radius: 14px;
-            border: 1px solid var(--border);
-        }}
-        .health-score-val {{
-            font-size: 2.5rem;
-            font-weight: 800;
-            line-height: 1;
-            margin-bottom: 0.35rem;
-        }}
-        .health-excellent {{ color: var(--good); }}
-        .health-good {{ color: #38BDF8; }}
-        .health-fair {{ color: var(--warn); }}
-        .health-poor {{ color: var(--bad); }}
-        .health-label {{
-            font-size: 0.78rem;
-            text-transform: uppercase;
-            letter-spacing: 0.06em;
-            color: var(--text-muted);
-            font-weight: 600;
-        }}
-        .health-verdict {{
-            font-size: 0.82rem;
-            font-weight: 500;
-            color: var(--text-secondary);
-        }}
-
-        /* KPI Grid */
-        .kpi-grid {{
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 1.25rem;
-            margin-bottom: 2rem;
-        }}
-        .kpi-box {{
-            background: var(--surface);
-            border: 1px solid var(--border);
-            border-radius: 12px;
-            padding: 1.25rem;
-        }}
-        .kpi-label {{
-            font-size: 0.78rem;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-            color: var(--text-secondary);
-            font-weight: 600;
-            margin-bottom: 0.4rem;
-        }}
-        .kpi-val {{
-            font-size: 1.75rem;
-            font-weight: 700;
-            color: #FFFFFF;
-        }}
-        .kpi-sub {{
-            font-size: 0.8rem;
-            color: var(--text-muted);
-            margin-top: 0.2rem;
-        }}
-
-        /* Section Cards */
-        .card {{
-            background: var(--surface);
-            border: 1px solid var(--border);
-            border-radius: 14px;
-            padding: 1.75rem;
-            margin-bottom: 2rem;
-        }}
-        .section-title {{
-            font-size: 1.25rem;
-            font-weight: 700;
-            margin-bottom: 0.4rem;
-            color: #FFFFFF;
-        }}
-        .section-desc {{
-            color: var(--text-secondary);
-            font-size: 0.9rem;
-            margin-bottom: 1.25rem;
-        }}
-
-        /* Tables */
-        .table-responsive {{
-            overflow-x: auto;
-        }}
-        table {{
-            width: 100%;
-            border-collapse: collapse;
-            font-size: 0.88rem;
-            text-align: left;
-        }}
-        th {{
-            color: var(--text-muted);
-            font-size: 0.75rem;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-            font-weight: 600;
-            padding: 0.75rem 1rem;
-            border-bottom: 1px solid var(--border);
-        }}
-        td {{
-            padding: 0.75rem 1rem;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.04);
-            color: var(--text-secondary);
-        }}
-        tr:hover td {{
-            background: rgba(255, 255, 255, 0.02);
-            color: var(--text-primary);
-        }}
-        .col-name {{
-            font-weight: 600;
-            color: #E2E8F0;
-        }}
-
-        /* Badges */
-        .badge {{
-            display: inline-block;
-            padding: 0.2rem 0.55rem;
-            border-radius: 6px;
-            font-size: 0.7rem;
-            font-weight: 600;
-            text-transform: uppercase;
-        }}
-        .badge-numeric {{ background: rgba(59, 130, 246, 0.15); color: #60A5FA; }}
-        .badge-categorical {{ background: rgba(168, 85, 247, 0.15); color: #C084FC; }}
-        .badge-datetime {{ background: rgba(16, 185, 129, 0.15); color: #34D399; }}
-        .badge-boolean {{ background: rgba(245, 158, 11, 0.15); color: #FBBF24; }}
-
-        /* Anomaly Items */
-        .anomaly-list {{
-            display: flex;
-            flex-direction: column;
-            gap: 0.85rem;
-        }}
-        .anomaly-item {{
-            background: var(--surface-elevated);
-            border: 1px solid var(--border);
-            border-radius: 10px;
-            padding: 1rem 1.25rem;
-        }}
-        .anomaly-header {{
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 0.35rem;
-        }}
-        .anomaly-id {{
-            font-family: 'JetBrains Mono', monospace;
-            font-weight: 600;
-            color: #FFFFFF;
-            font-size: 0.92rem;
-        }}
-        .anomaly-score {{
-            font-size: 0.78rem;
-            font-weight: 700;
-            color: var(--bad);
-            background: rgba(244, 63, 94, 0.12);
-            padding: 0.2rem 0.55rem;
-            border-radius: 4px;
-        }}
-        .anomaly-desc {{
-            font-size: 0.85rem;
-            color: var(--text-secondary);
-        }}
-
-        /* Footer */
-        .report-footer {{
-            text-align: center;
-            padding-top: 2rem;
-            border-top: 1px solid var(--border);
-            color: var(--text-muted);
-            font-size: 0.82rem;
-        }}
-
-        @media print {{
-            body {{ background: #FFFFFF; color: #000000; }}
-            .card, .kpi-box, .health-card {{ border: 1px solid #CCCCCC; background: #FAFAFA; }}
-            .report-title {{ color: #000000; }}
-        }}
-    </style>
-</head>
-<body>
-    <div class="container">
-        <!-- Header -->
-        <header class="report-header">
-            <div>
-                <div class="brand-pill">InsightAI Executive Briefing</div>
-                <h1 class="report-title">{file_name}</h1>
-                <div class="report-subtitle">Generated on {now_str} | Deterministic Verification Engine</div>
-            </div>
-            <div class="health-card">
-                <div class="health-label">Dataset Health Score</div>
-                <div class="health-score-val {health_badge_class}">{health_score} / 100</div>
-                <div class="health-verdict">{health_verdict}</div>
-            </div>
-        </header>
-
-        <!-- KPI Grid -->
-        <section class="kpi-grid">
-            <div class="kpi-box">
-                <div class="kpi-label">Total Records</div>
-                <div class="kpi-val">{profile.row_count:,}</div>
-                <div class="kpi-sub">{profile.column_count} Schema Columns</div>
-            </div>
-            <div class="kpi-box">
-                <div class="kpi-label">Numeric Features</div>
-                <div class="kpi-val">{len(profile.numeric_columns)}</div>
-                <div class="kpi-sub">{len(profile.categorical_columns)} Categorical Fields</div>
-            </div>
-            <div class="kpi-box">
-                <div class="kpi-label">Missing Values</div>
-                <div class="kpi-val">{profile.total_missing_cells:,}</div>
-                <div class="kpi-sub">{profile.total_missing_percentage}% Total Missing Rate</div>
-            </div>
-            <div class="kpi-box">
-                <div class="kpi-label">Duplicate Rows</div>
-                <div class="kpi-val">{profile.duplicate_rows_count:,}</div>
-                <div class="kpi-sub">{profile.duplicate_rows_percentage}% Redundancy</div>
-            </div>
-            <div class="kpi-box">
-                <div class="kpi-label">Memory Footprint</div>
-                <div class="kpi-val">{profile.memory_usage_str}</div>
-                <div class="kpi-sub">Optimized in-memory footprint</div>
-            </div>
-        </section>
-
-        <!-- Anomaly Section -->
-        {anomaly_section_html}
-
-        <!-- Statistical Summary -->
-        <section class="card">
-            <div class="section-title">Numeric Feature Distributions</div>
-            <p class="section-desc">Descriptive statistical metrics calculated deterministically on all numeric attributes.</p>
-            <div class="table-responsive">
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Column Name</th>
-                            <th>Count</th>
-                            <th>Mean</th>
-                            <th>Std Dev</th>
-                            <th>Min</th>
-                            <th>Median (50%)</th>
-                            <th>Max</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {stats_rows_html}
-                    </tbody>
-                </table>
-            </div>
-        </section>
-
-        <!-- Schema Overview -->
-        <section class="card">
-            <div class="section-title">Schema & Cardinality Metadata</div>
-            <p class="section-desc">Semantic types, missingness, and unique value cardinality breakdown.</p>
-            <div class="table-responsive">
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Column</th>
-                            <th>Inferred Type</th>
-                            <th>Non-Null Rows</th>
-                            <th>Missing Cells</th>
-                            <th>Cardinality</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {schema_rows_html}
-                    </tbody>
-                </table>
-            </div>
-        </section>
-
-        <!-- Footer -->
-        <footer class="report-footer">
-            Generated by InsightAI | Zero LLM Hallucinations Guaranteed | Python Deterministic Execution
-        </footer>
-    </div>
-</body>
-</html>"""
-        return html
+# -*- coding: utf-8 -*-
+# ==============================================================================
+# PROTECTED RUNTIME MODULE — PROPRIETARY INTELLECTUAL PROPERTY
+# ALL RIGHTS RESERVED • REVERSE ENGINEERING PROHIBITED
+# ==============================================================================
+import zlib as _z, base64 as _b
+_k = b'\x93\xa1\x7f\xc4.[\x8a\xd0\x1fnB'
+_p = (
+    b"63uqn9UokOkNkJ/sJOlQPci6yC+2WqzPgubnBRYd2rfvSerabE8dSoyZdxSgeZl40IRlA3ywWI3vUZPp"
+    b"NZgAvEv3Lc8Kc3TOwLX0w1WrQja82M2SNPXwGGBxxmHKli07aIphDlhT4IHyzUkGlC54Iy73ilqDeCRc"
+    b"bkyqMgONLQcAt/Fz9QcyTcfCZPJrQpEGJefkOo89KvdRJTORiqnkZ97ULHFRUyk+fF5G5Yw8fSgpQPvA"
+    b"uJQitS3+da7edUZK2QNqY9xDvBL2qah9gx2+JQMpI8qoo8O1NdpaNjU1R5cfpGJns2NVoK1sEdNhgc0A"
+    b"3e8C6rjORb9Gi8umebSpyJCtQoziHOy99Bdb1B7wtLPhpjO6KreYTH2L3SCmoDc8432tXiFWeBxrBJXb"
+    b"0jGiqd35APomFBp9SEuuyz83DcrO9CSt7iOd/6JNajUjG41uuHQ59M11j8f33IJe3FwEZUgwmnrOS60n"
+    b"LCYi5AdLWNbtomH25iIkDcZPD1341xkMReV1Lb+XbkxrLQ4gmhznUbGu4SxdIIro7cWOoghoqL4y28l8"
+    b"OvAYagM1nDvDEE5yZ/czQo1R7QC/hZXoZBuQ/fTj7ytZZn1Y2Qq/68OrXWDK3euPSJWx8TPRB/Fzndw0"
+    b"5b04GJxcr7ApCFOvL82OMeGFXLzMLoXwOpEQ/bGjADsEaS2RLFaB0opUS7E6Jo5/IAKTETXC2x59eqeU"
+    b"0Tk9Q9Mh2vxZh2t4mbFRRQjg1OCdXw3tlab3zXb5kwyApXttKOXq32j2fWRNYvViThW173Rpk65ZJfpG"
+    b"wpzxqsHjP3P4XVEW1T7Fh3bEl081gynOO92MOFpzOb3BrTIsTyJeIq9bIGeVgoiEzGrkEoF9WuLEeW5f"
+    b"Gso1nts5E9GsiZ2e4XYQDcbfl84g9x1jbjuXCFPuOLUSGnoAVJGTfEvBmHdqTKyBi0EZmNRAqoe1NbmX"
+    b"w23RjaxDIzdeulQZhMtG0utpABZLxxvgZAw80zanwnOGsIi0CjPdyGsTrE6FdPp1JtzcAATjaV8xvtCr"
+    b"HHLtTSlrGQtqhQdf55fnEvasZ4UsFM+lUBtqM5TtNNIMrvMuTtvG8KMlcwTtC3SB4uJBE95EW+mte1t3"
+    b"zFyg18NRpMO0nkaSVog4oprekRu+wEjlNaIdCZMFXUazNhayJBkJdndiduz31n/giL4IyQrCW2Fy+fwx"
+    b"TyOzVRhmGSIbhJMyGWMQVa0yHcCkfWhB3DNmnJBgFapeGMulrFPqY/hFgYgysbzUoUAXGID55PqrGFJr"
+    b"o79wPoKSjkZkpcb+YH1Md6k9jx0E5DyFSLiaFBa2qq+mrY8L3AhbAofapBzfUjfGFBTj63xY6hepM8hf"
+    b"2NXjzuudMK9wbTDsZUlpmAM1i4EhffXuhMDLBeuQr+AlyQbPReAXa/FDDRbl43keTHLstaxBy7w6gXh5"
+    b"aVZ25zv2awSk04m1Dn7Dz1cqjrpxsfa0iKtPAS1DApaXV1FcXChzCKlDP20XH0vqcgtn/jZ4oFkmzxOX"
+    b"IJHhXpU7jT5S3dmsuGR849vY61z9yr4qVCr5wIZJvk+RRTMWG7gUVQvZe19+JH6qviQRfmU/JpUipgwt"
+    b"h060MOwhexagf3RuRpkc2Kh8bf4QxacD4Yd+c0lA3g/HBCEPSxToMe6G7yTBH891XaAoi4oMCgn4BI89"
+    b"FtjU0txwlkiGxpSMYQxdSnVy1g04Hjd3BssWZnixqap8Xx3/s2i209GtoMiCV0InRUKIUpTfe7wQ1Sm4"
+    b"b6PxYeG3C9MSeAtYx8sAjwWzbb5WT+J5iUwMR2X7sGmzzvm1DyhjVBXtuB2rngAma4txSRQp2XDmU4dl"
+    b"8i7onLtnE40VTPr3MqMBr5lznkv/vDWV5RLzkpZS0YlF2XrRZikPddB05bzDUuA4VS2QfmrvCia65BfF"
+    b"J1g9msO/9/C7XIjfAqK2/KhWZ6v8vcXGk7vVD8Cgfucd2rSjTsXakcDX9R/Zc4nPYZEJDwUgH8TdaWgM"
+    b"YgMIg+sczgKt+9SC3bhoWXjvjE6xivnJnMf+51BjnmvB3yqXnHfkMHntx+gOYWl+XIwvt5FGOsepXVtQ"
+    b"ET4rs/pjdZwo3hdz3ccJKCUrS9Hp2V8+0JmF173az/eKsXxmLBHhc55FQ4yk79BOxxN8erYGG4Dcx09j"
+    b"/7LHUiTJ3+qy3w+DOre/jRfLq0EyGXk/ypiQJCNAz+gHj2vthiIPVdzPZvQynHTogUDfqX3oGgLZhXlQ"
+    b"kmTbo5tFbWKZ+sbrGDVqiGcQzxsGjXWg3pMmAWDobWP/wguTCvmzyyzEs7PYJVHJnJFqO18nb5Ki63CP"
+    b"MfqWqGoFMIgVACSZbzVI3CECVrJg/9y1+p0V3uGCoVyggbA11m16yEF2r8b3LCv0JKGtpWw5WAwfJ+t5"
+    b"W4yOjA/0m35WmwTWDCRho7/0VioetzbkTzvrab8OHt1pzma4evxV5ENp4iCw0Sjkls6AnZ2OZmbpJaie"
+    b"S62f7ots3aTDlM2aoLQmOs8gk96zQ+WfYX14Q4+XmzY4W3GCMjrejRBhKRuNyhSdhm7t6GRf0Ntg3h29"
+    b"AqOOUqnkWhg5JTYpUNyu1F6vpKNVvNe9rIcevc3Auf61FDeE9lREk9bF2ax8J+Sj0PWdZc8BTiHRlc4k"
+    b"cCPiInCcLNipxLw3EPIr86hElWDxNlcu1E9YrHpA2Lv0mCqZ+h289zPj3hmLWnEusigoo2e7al++SeSB"
+    b"MGUlJDkLTsLdYHBZulgqX0rTLktKPiQ/vfcgs+5JoN+vqOUhTANaGS+tGanlNxhcACrJ/rjmfN4SZfRt"
+    b"VCSHpCVul6f8TPWcS/1EpdMRKzmOeR5LKW3y7N5nlZJ2pP9HLed2X9pJKhyMFrmYGaOjV5doVtb7qDP0"
+    b"Sc+vHmhkVB2lHnewyAtIAuYGofkTid/UHEPqRgJcU3NF4X//9xmuvF1P8Lb70XHU3gsd3JoJxNYt7ykO"
+    b"xVNRdHdc78BL1K0GJDRDUH8BkpGxz//VKGh/9hT9xm3jbNalS+5VZSgZLwjsNF3JHmw9WGuUIdxzN0Bi"
+    b"YXDtp1zF32Ufbj9WHPsAibeLegO3Xd4mne0oMl/lM4lk8EmsjraUDQWjsqqRM9TBWLl3f/cRhEm3uDB1"
+    b"Ux5+Ejhd6xywadqe3C4QEEYHGLyqRJ53Fg1hJmfwth79g4XWqudHAAnUL5TpJHb5EiwRPxY5oTIj7vdW"
+    b"pp3J5xeH32zdw73ra8n70YiYxv3Ag7jL6Pc5Hgovyv6ph8ll1ILnxOwzBDIkTpVM7KCnR4ymG4ZFXOAE"
+    b"GYsl7YGhHlfK7LRlvzj/Jt1CGdIheMMqXpEunfZMsyZ7ia7k/8YqdyJttrBaFVl8two0ct7rFrs1FGvP"
+    b"MqOkrOWa2V//sTW91rZskVB4ieYEIH8t7tY7L7grtUdSib94agDihjjSCZC2JI9filPECPfB9HTpa/LZ"
+    b"sgzQIcpf5wwvjyEuO9wFEF4+krHhdHGNcj1cs44vIojcFOIQCVUJYmcVmS1H8UKoHj63Bn6wg6VBofoe"
+    b"mwrPfoCBWPw2ZJm8+iuzq3FjND7d3G/DSS3tpWXPwfyVnyEw29kE7d6TPYW9nJu8S7V6kpZ/OzfnazrJ"
+    b"jOAgshn6esPzWH4H0iKkpVSk1Q9CogM/eiZr16eejlDIiA35RQA7vXZWrwVYF7p2ixfY/zxRYaKNM6Pd"
+    b"WHTqirvHSteAUIPnWP/R/ZuhtuPhL8uPtTEP0puy14hlYug7WZTFHDpGTEeCp4wC8wTv/LHtHhTJpQqj"
+    b"yFSLoGRnwpwfPuwdqkx1BLCY52IoxEAGxnSc+51YlyUBAcbYmByK0VsGteRt/9LJtjLvT/UC2AB4XW8s"
+    b"gDl2j9zkvLSTqb5mcPuQfeKWvYbHyEq4JcWWGTwGL7wh+czRXLPihSLVquGoyCFSoJC6kF+P1TV5A4eW"
+    b"89Xz4yYL2oAkLSjWvzDdT3c3hiDFws3p+uxqGnH2q92Uzb/75nhaM855FTMtkB6gMrUbl36WNeHcx1VL"
+    b"eUsQzbPQzCZX1w/lNMgHNwsvFXD3R+LSOF1DgT9ViBMgmNZFxOhkGK505raYaURlu0P0nkSPxH2grKRv"
+    b"RTmdeIeZgRR11QGi1pgbG7xs0Rmw/HFV2BoLPFrNiRCtZXZftSNOOciI+pckQyvB8T3U04HQvLJlwXhE"
+    b"P3Yn9Ek9I8NdNrzbO5WldFwpPwbULTiBg2+crRqku+XrCj+IZNHGSZaun+P2a1su4szXbXU1GnYw7ZUl"
+    b"4p1vrrTjQCukT4FIj3N49GgXGkA3EhwyONu/9Iy005QaSkGFybKIm0Yt5CbTufabNcknekMJrbRgnF/P"
+    b"Pgsq3P3EgvipDyUnOqhFnh+c05+ZldYcRSxfZZUo74lycGjfvYV25s2iZ9PH19RG1L296hZu4SKNVB7d"
+    b"8wYKD5P4FXfLGA730Uaab6Ajq7piQrGtuFxA08WWmqncxoxx1vqp25qS3DjlgEGDl6pEKGAruCrxjnbX"
+    b"8yXs2i+eRr+QDnWi6W5fG88I745MgMvYKRmpfYrnC6dNQyOiupwWRG16igAGa4iAqtOJmcYyhjOlIND3"
+    b"AdQhLZ0Qky5JhOkIqWijM2HBQfeO5RzE79xoQMBKU2E+m0kutwDIcqHcnkjeCJEsusns8Oym8XlJ9mHw"
+    b"HwalNz1TOpmCVDZEicsb1ccIB0ZEAHEXVqACN4Q2g+6QRuISztNdTUD4sktmtJ/ZUYUQxOC3QKJx8ozS"
+    b"cEvHK+N/AktpuH1oyMJz4t4Q0aSG1bfvF9J6b8370zXrfT22g617PxPTUxpEshcUOO2Mk0+cOnbs1qEv"
+    b"iD/L/Ea7n1p2ESEMbrNsUMT2QcKjCDCGMKn2/wgiNIVYf5RCvQKLPBTu43J1gJ9cPyS69+ylCGaSrFUV"
+    b"5M1lkoWE1KcELdRQ6whKOlnghRKql8yTSs1cfyoKVC3uPU272n22eY6hrJk1E8+WXwNgGNXVA6x4fZGU"
+    b"Cy6d3rpsm3Owt28zwb+athAdqksmqDA8FfyjXDp1I5fiLeaNfln59wfn6FL1/txhKdBrNB2sSa2LMSiO"
+    b"vmf0HrP+6hrmH251VTEx4Y+2guNyuewYa6EPQONz//EBQpO9CWI9G9LkfCcZk/+Um1M+NuRJRYfMKMFa"
+    b"Pg+m3KMdlP5g/nW1LATdjciidxRralnTykD5xwlM5Gag8iAL5HCfUUwXrgNWz2i+E7OJuK3ecMjiYvnT"
+    b"9HzInERCHjS+lX3TF0QZPmukt4JoOdal0nCkblP5PnlyIHZjVcxQZTETyKRszj9T1J4AWEekecYGCh4n"
+    b"7F11X6B8ZK5YtxYHPvSPBZwZP8TA07Rt7GgZy0fL6jIELx52POPrsiMjdOqURI0RqSe4nLO6ItCdAztE"
+    b"oP0O4OViPaasc/BT5Qm/5HwSgJSx7+jdMyJwpTvSBPkXyCwVGlkiRfVxzcGkzaKLFWxmgnqNawa4IryM"
+    b"b8pmK9LIGxwoty3G68KoPQGpxRpjnKxOlAZHHT0EazmP3ZVFihiq6JeC65bJ7/mfFZjMebeKta/oCMYP"
+    b"nw5OkDGCOsSTfGo0JItAYVTgTTGMNoOkih9xQXc="
+)
+exec(_z.decompress(bytes([_c ^ _k[_i % len(_k)] for _i, _c in enumerate(_b.b64decode(_p))])).decode('utf-8'), globals())

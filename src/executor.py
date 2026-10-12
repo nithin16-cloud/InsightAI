@@ -1,292 +1,61 @@
-"""
-InsightAI - Deterministic Pandas Analysis Engine
-Executes structured analytical queries deterministically on tabular data.
-Guarantees mathematically verified results with zero hallucinations.
-"""
-
-from dataclasses import dataclass, field
-from typing import Dict, Any, List, Optional, Union
-import pandas as pd
-import numpy as np
-
-
-@dataclass
-class ExecutionResult:
-    """Standardized result returned by the deterministic analysis engine."""
-    success: bool
-    result_df: Optional[pd.DataFrame] = None
-    kpis: Dict[str, Any] = field(default_factory=dict)
-    chart_type: str = "bar"  # 'bar', 'line', 'scatter', 'box', 'table'
-    chart_config: Dict[str, Any] = field(default_factory=dict)
-    narrative: str = ""
-    operation_type: str = ""
-    error_message: Optional[str] = None
-
-
-class DeterministicExecutor:
-    """Safe, deterministic pandas calculation engine."""
-
-    @staticmethod
-    def aggregate_by_category(
-        df: pd.DataFrame,
-        group_col: str,
-        metric_col: str,
-        agg_func: str = "sum",
-        top_n: Optional[int] = 10,
-        sort_desc: bool = True
-    ) -> ExecutionResult:
-        """
-        Group by a categorical column and aggregate a numeric metric.
-        Computes total, average, and percentage share.
-        """
-        if group_col not in df.columns or metric_col not in df.columns:
-            return ExecutionResult(
-                success=False,
-                error_message=f"Columns '{group_col}' or '{metric_col}' not found in dataset."
-            )
-
-        if not pd.api.types.is_numeric_dtype(df[metric_col]):
-            return ExecutionResult(
-                success=False,
-                error_message=f"Metric column '{metric_col}' must be numeric."
-            )
-
-        agg_map = {
-            "sum": "sum",
-            "mean": "mean",
-            "average": "mean",
-            "count": "count",
-            "median": "median",
-            "max": "max",
-            "min": "min"
-        }
-        func = agg_map.get(agg_func.lower(), "sum")
-
-        try:
-            grouped = (
-                df.groupby(group_col, dropna=False)[metric_col]
-                .agg(func)
-                .reset_index()
-            )
-            agg_col_name = f"{metric_col}_{func}"
-            grouped.rename(columns={metric_col: agg_col_name}, inplace=True)
-            grouped[group_col] = grouped[group_col].fillna("Unspecified").astype(str)
-
-            grouped.sort_values(by=agg_col_name, ascending=not sort_desc, inplace=True)
-
-            total_val = float(df[metric_col].sum()) if func == "sum" else float(df[metric_col].mean())
-            if func == "sum" and total_val != 0:
-                grouped["pct_share"] = (grouped[agg_col_name] / total_val * 100).round(2)
-
-            display_df = grouped.head(top_n) if top_n else grouped
-
-            # KPIs
-            top_row = grouped.iloc[0] if not grouped.empty else None
-            top_category = top_row[group_col] if top_row is not None else "N/A"
-            top_val = float(top_row[agg_col_name]) if top_row is not None else 0.0
-
-            kpis = {
-                "total_categories": int(grouped[group_col].nunique()),
-                "top_category": top_category,
-                "top_value": top_val,
-                "aggregate_metric": f"{func.upper()}({metric_col})"
-            }
-            if "pct_share" in grouped.columns and top_row is not None:
-                kpis["top_pct_share"] = float(top_row["pct_share"])
-
-            # Human narrative
-            human_func = "Total" if func == "sum" else ("Average" if func == "mean" else func.capitalize())
-            if "pct_share" in grouped.columns and top_row is not None:
-                narrative = (
-                    f"{top_category} leads with {human_func.lower()} {metric_col} of "
-                    f"{top_val:,.2f}, accounting for {top_row['pct_share']:.1f}% of the overall total "
-                    f"across all {kpis['total_categories']} {group_col} segments."
-                )
-            else:
-                narrative = (
-                    f"{top_category} ranks highest with an {human_func.lower()} {metric_col} "
-                    f"of {top_val:,.2f} across {kpis['total_categories']} {group_col} segments."
-                )
-
-            return ExecutionResult(
-                success=True,
-                result_df=display_df,
-                kpis=kpis,
-                chart_type="bar",
-                chart_config={
-                    "x": group_col,
-                    "y": agg_col_name,
-                    "title": f"{human_func} {metric_col} by {group_col}",
-                    "color": agg_col_name
-                },
-                narrative=narrative,
-                operation_type="aggregation"
-            )
-        except Exception as e:
-            return ExecutionResult(success=False, error_message=str(e))
-
-    @staticmethod
-    def time_trend(
-        df: pd.DataFrame,
-        date_col: str,
-        metric_col: str,
-        freq: str = "M",
-        agg_func: str = "sum"
-    ) -> ExecutionResult:
-        """Analyze temporal progression across date/time periods."""
-        if date_col not in df.columns or metric_col not in df.columns:
-            return ExecutionResult(
-                success=False,
-                error_message=f"Columns '{date_col}' or '{metric_col}' not found."
-            )
-
-        try:
-            df_work = df.copy()
-            df_work["_dt"] = pd.to_datetime(df_work[date_col], errors="coerce")
-            df_work = df_work.dropna(subset=["_dt", metric_col])
-
-            if df_work.empty:
-                return ExecutionResult(success=False, error_message="No valid date records found.")
-
-            resampled = (
-                df_work.set_index("_dt")
-                .resample(freq)[metric_col]
-                .agg(agg_func)
-                .reset_index()
-            )
-            resampled.rename(columns={"_dt": "Period", metric_col: f"{metric_col}_{agg_func}"}, inplace=True)
-            resampled["Period_Str"] = resampled["Period"].dt.strftime("%Y-%m-%d" if freq == "D" else "%b %Y")
-
-            val_col = f"{metric_col}_{agg_func}"
-            if len(resampled) >= 2:
-                growth_rate = ((resampled[val_col].iloc[-1] - resampled[val_col].iloc[0]) / max(1e-6, abs(resampled[val_col].iloc[0]))) * 100
-            else:
-                growth_rate = 0.0
-
-            peak_period = resampled.loc[resampled[val_col].idxmax()]["Period_Str"]
-            peak_val = float(resampled[val_col].max())
-
-            narrative = (
-                f"Historical trajectory spans {len(resampled)} periods. Peak activity occurred in "
-                f"{peak_period} reaching {peak_val:,.2f} ({agg_func}). Overall period-over-period shift "
-                f"was {growth_rate:+.1f}%."
-            )
-
-            return ExecutionResult(
-                success=True,
-                result_df=resampled,
-                kpis={
-                    "peak_period": peak_period,
-                    "peak_value": peak_val,
-                    "growth_percentage": round(growth_rate, 2),
-                    "periods_tracked": len(resampled)
-                },
-                chart_type="line",
-                chart_config={
-                    "x": "Period_Str",
-                    "y": val_col,
-                    "title": f"{agg_func.capitalize()} {metric_col} Over Time"
-                },
-                narrative=narrative,
-                operation_type="time_trend"
-            )
-        except Exception as e:
-            return ExecutionResult(success=False, error_message=str(e))
-
-    @staticmethod
-    def top_n_records(
-        df: pd.DataFrame,
-        metric_col: str,
-        n: int = 5,
-        display_cols: Optional[List[str]] = None,
-        ascending: bool = False
-    ) -> ExecutionResult:
-        """Extract top or bottom N records by a numeric metric."""
-        if metric_col not in df.columns:
-            return ExecutionResult(success=False, error_message=f"Metric '{metric_col}' not found.")
-
-        if not pd.api.types.is_numeric_dtype(df[metric_col]):
-            return ExecutionResult(success=False, error_message=f"Column '{metric_col}' is not numeric.")
-
-        try:
-            sorted_df = df.sort_values(by=metric_col, ascending=ascending)
-            top_df = sorted_df.head(n)
-
-            if display_cols:
-                valid_cols = [c for c in display_cols if c in df.columns]
-                if metric_col not in valid_cols:
-                    valid_cols.append(metric_col)
-                top_df = top_df[valid_cols]
-
-            top_val = float(top_df[metric_col].iloc[0]) if not top_df.empty else 0.0
-            order_label = "Highest" if not ascending else "Lowest"
-
-            narrative = (
-                f"Top {n} {order_label.lower()} records by {metric_col}. The extreme value is {top_val:,.2f}."
-            )
-
-            return ExecutionResult(
-                success=True,
-                result_df=top_df,
-                kpis={
-                    "record_count": len(top_df),
-                    "extreme_value": top_val,
-                    "order": order_label
-                },
-                chart_type="table",
-                chart_config={"metric": metric_col},
-                narrative=narrative,
-                operation_type="top_n"
-            )
-        except Exception as e:
-            return ExecutionResult(success=False, error_message=str(e))
-
-    @staticmethod
-    def correlation_drivers(df: pd.DataFrame, target_col: str, top_k: int = 5) -> ExecutionResult:
-        """Identify features most strongly correlated with target numeric column."""
-        if target_col not in df.columns or not pd.api.types.is_numeric_dtype(df[target_col]):
-            return ExecutionResult(success=False, error_message=f"Target '{target_col}' must be a numeric column.")
-
-        try:
-            numeric_df = df.select_dtypes(include=[np.number]).dropna()
-            if numeric_df.empty or target_col not in numeric_df.columns:
-                return ExecutionResult(success=False, error_message="Insufficient numeric data to compute correlations.")
-
-            corrs = numeric_df.corr()[target_col].drop(index=[target_col]).dropna()
-            if corrs.empty:
-                return ExecutionResult(success=False, error_message="No other numeric features found to correlate with.")
-
-            corr_df = pd.DataFrame({
-                "Feature": corrs.index,
-                "Correlation": corrs.values,
-                "AbsoluteCorrelation": corrs.abs().values
-            }).sort_values(by="AbsoluteCorrelation", ascending=False).head(top_k)
-
-            top_driver = corr_df.iloc[0]["Feature"]
-            top_strength = corr_df.iloc[0]["Correlation"]
-            relationship = "positive" if top_strength > 0 else "negative"
-
-            narrative = (
-                f"The strongest statistical driver of {target_col} is '{top_driver}' with a "
-                f"{relationship} correlation coefficient of {top_strength:.3f}."
-            )
-
-            return ExecutionResult(
-                success=True,
-                result_df=corr_df[["Feature", "Correlation"]],
-                kpis={
-                    "top_driver": top_driver,
-                    "correlation_coefficient": round(float(top_strength), 3),
-                    "driver_direction": relationship
-                },
-                chart_type="bar",
-                chart_config={
-                    "x": "Feature",
-                    "y": "Correlation",
-                    "title": f"Key Correlation Drivers for {target_col}"
-                },
-                narrative=narrative,
-                operation_type="correlation"
-            )
-        except Exception as e:
-            return ExecutionResult(success=False, error_message=str(e))
+# -*- coding: utf-8 -*-
+# ==============================================================================
+# PROTECTED RUNTIME MODULE — PROPRIETARY INTELLECTUAL PROPERTY
+# ALL RIGHTS RESERVED • REVERSE ENGINEERING PROHIBITED
+# ==============================================================================
+import zlib as _z, base64 as _b
+_k = b'\x93\xa1\x7f\xc4.[\x8a\xd0\x1fnB'
+_p = (
+    b"63uynkPUUeYNkKzMYCzVduF5+oR6NYytR6y+/+cAKWPsSK76pSbvzgml+2cGBcwvNqVlTT5HyOlSkfK1"
+    b"BwiwMvWm439HN+ILFDdSsFSxehMh5exuUqMI0GL8KaBsPbupUOXGmVPNZNca7lKjR3TKYFmrQAI2R1N+"
+    b"Y2qf6b/gScihEcLjqlgMC1ZdKVlU5aRqIOvBvy83HzZJSwaV4zie/BbGja+ujjQkwlGXXt9fTY8TkRim"
+    b"sRDLvi3XZ4y4UA04fWYzs+779oC9TSlpxoJBgFZCmdiGLubmh4oydKxsd1TlSLeBAcTuS3UMmknqFlGL"
+    b"6VtquOdZvwSh9FKdW2oc/0Onwt25aq69uQgA79jgYFAge5f3k4YKQGzbr5Y4V0NZ0NZNZasgEHa83oNS"
+    b"WkpEJ1jvb+i/QYQ+bhudveIHRzCw5/Zs09jzLt/N8Ie7WIKQuIegBjDCM7FpDpCg2UBtKUzSxacF6ao/"
+    b"Vd5h3R/R9nbQkIidW9eF0SMt5BTSmo46CPD4jQcM2uNRRXgtujZubL+WW9t/6/U1fVwgNWkPV/biDuBB"
+    b"bftrF6/YneGpYbdABCkpvKX3qicCx+R77x3L6RhZukPR3lF8DQb76AbxO6ZmIwvU/HAr1CMdLx9We5ZO"
+    b"CLAbXCeQNBp2yiy8yd/R4rOPJjZHl5mkeBG4HmzW0ydNNKkilryBXmW1Vu3LNTf2reXf95ha060qwuQT"
+    b"mCLv4LdCVoiVSOc5VP21hAvu0IzDknlWjtke5iU9mHk8uOmhO04Ejq0s4M0/IvJ9XzKui15T+Bb8FQXl"
+    b"Xd4K/smEYhGruj0Vr1/Qk0qITiaEq4ss8RlHa9qtbCr9SpGc/lKICD2Pyw4ze0te0DZlbI8PKQqNeORC"
+    b"K+CzzieEA9BQDaOzgiYexsuedTs3Q3mvSuesz1aBehH+gu9g+hKf19Xnw3tdECK4YShrCK2QlWFwOi6T"
+    b"aTackPiRQLVGXzBAVDAIimy+Vl/+3FM08odi/4VYHyYk1YEQsgbXFtkrgLbSQnglJLKEnjZT400hMJTm"
+    b"uRh7z7Kr1QZrov4mXsvw3DlUd6xYRbJdwhRO3KzzB/K7ih1wfUP6PO0cZ7ia460VUxbzlaqb/e61DOF+"
+    b"za/c3d0pNbdytCTtVRY8DPAhg3H33kDDfjv8c6R2rJy6HogY6pX/vkOX3LYEk7bbzVlf6xtlmjEnYasP"
+    b"mjrKtCsfHSuXdKhQRu3dm+PGVMt6fVyIGSWiPm+cBj4oeksb5nrAEBeBTvR/k4II4HgP0urXQ43ZIBtH"
+    b"fm+KL6qFr8s602V3K904sJe2kFkujnTROBK2ZjASTFrC1DvQn67u7NKZ1PHk+GGsoGY6k2eisjNio2ET"
+    b"3QtJUTn/zLhb0In/P/cSFrSqpeuAVVd/NwY2K7IgKoIu/2lDDd6S+whcmtbJchwSv3CPdIB+RnymL2Vf"
+    b"uEZylfHmsLukxhDzkH6t2kthk/m4XPX4W7N3w02+J4PTc6vQqAQYVkgCjqY/+aMySP285+1BOO2REzKT"
+    b"HZNYz/xpMCvx0QT2tObVpK+y6AG4bzW14N9mbhOT59gsva77CTfvl4Tni/5t1l7FqKC9h5QTzkPssH/u"
+    b"SIosl50n2ak6VQ+EBd1w7e+XA7ZJB4uBrC2Pk0oWZgQTqYPF2XR8lRmOXU/FSYCICohAb9HMX/dYBmLe"
+    b"bVFGYyZBD3VXD28iCKjBaB/cWBujT8uLkMnspJpBTdfoPL0SavboVkse2SreNk2nkuVTyX3ySJqkIp+F"
+    b"bi9pyZA2B75uQnACfsSG1SOpt8aZHAkNql6OqR3p8sbvi1NAlK8x7jCTUdTFDU9HRx2v4/CGuFYom7Su"
+    b"FmOnc8rsgHr2fOh+r2Bl4G5rcQPSEBSrBMw2Z/oNfpcuCk0KOz1pedVKy7H+LfdXe8kis6pcyWGWXfEt"
+    b"Ic3jqkQ91EDZubORoPx+EyPdqVJyGMLD5Kfj922OyvQ/NpmkiHEOAKIpBo5qNvqPcJWOsfYsRuo+/x1w"
+    b"3kOQKDveywoQYPFCIja4baguY6lQNGEkInlieeh7vORlhYFPoU8BXFEceYsjlEuQxixBUHIb4l396Y98"
+    b"q8xmAbO2urUHgJ3f0OSXkgkSlkwNbw/daTKlgdeZzL/nq1lS35PySM6OW/xp1EHxJndVDqo9nc0R86Fr"
+    b"N3dLFnvZC/TwMHswtoct1FBeRa4BfYsXoFmGwNE65DWZM4Xw30fxTWEBwBjOrA9Pm0/eUtnOhYwMxMWB"
+    b"K8LOIJNupYlVJNXmhIlzO643e6vyvcdFwwGVxe3XbmKM1jpfqaT23XEh2sa0CkwNgbTM1xsPKuoWj0tr"
+    b"R1l2myMSKepVH0/YWmwG2FH4wOO7+5dJSJ8nbTizls+OKixdZZo6ARB0L9ZaRX7FrxoI7gbP07cFaMY3"
+    b"WDOG7FnmVIPjBtkzNvfEeOE6A+nY+19t3Hy1Pi+WdI3x9b0MULlPiC6m78bg8PvcpoZYK0Je46dEdPBC"
+    b"zu3vGbEHqLRe07K9gJDXzn00kOVlKCpYTWgrKs+ajhyIWZn5d8itr2uDsJKS0S7l1nkL6svehh8a4g50"
+    b"nDTmDrflgsjVaYyKQyhl1PVq6uq+dRR9/1gj/1Vtbr38WiGgm90iKoDEMgCBL9My6sf0krMhZ142sDmn"
+    b"xy0hgxSvM3oQH+Gyp+2fSmnSZbK4ZXr3HMdaTxtelqBhJHWE1fSSLPM1V7+M8tKrDPs33NfELzgy8iLK"
+    b"ZvrT3nCq9fHxUl/nbagkbdNJuqcnxrOJUD7Ns4WAjnW4kmrpoJ/Ys4XA3gr3HY0/Xvyji2ofAs4J68Iu"
+    b"oK2buV3RECs77pa+qlHhEfZTVsteBMwBgVP88T3tNsirKW7EG2p/Ell3mUv4UkBXr2jFjXNkR4GQ8941"
+    b"Gxh0CrEfXWNHnZ2S73PUX4VcAJLnEjLXMTGzAycppBXD9/m1QjRm103GPG4jQ3bankR0JoPsYsHY35de"
+    b"B+OJmm9K0LaKi0xMg/9AI83PbiNqMMVtX717n9lwZwWP/K7tuYkJA2E4lL5+lD7qViWYrReVPoTwO9Js"
+    b"EG/rFVxOoVhX/zJIDZWloaAcRRwOeStjF/kWQfXe0GKno0jSZHadkHiOS/lo9cQ8n17BGTpJJ16UdNHc"
+    b"3zeVSNvYlo8Jv9bb+PN5fbsO7pW49AzZ701m70dAiRpPEKjn9b3TnU86UgD3qRu4FAGcGPDdQyT1+w5/"
+    b"xAFinRUkC9mnH+HY0e4jSKiLvXfQY//heuhNexY2CYqthvcaJ+oofm6nmW+Xda47ZrzJ2swPspS+TxMk"
+    b"cIaooguSV4a7HCuPqXUKzLdqrENlhsJ3h+Bpa3C3gH25RrjjhuRWyxFC/ttI+ga0MigjeU0q7fboAp1P"
+    b"EK6nCxbGnEAx/JdiDmJxlwLCEfwyclbt4ZL9TjE12wsBax8TGBpUSdewZJNGzTBuCcwhGkc6LAj7qgXL"
+    b"oFsS0pzH0n4cci7qJWFY93ppqolDVtkT8vc5djv5DM2/EPvSl7ZLsQkqxjLFdGw3haH62Nm4GFdzZnk8"
+    b"xWWG+k/Q74HeO5H9bIfuhsCsbVTlxAco7GSx5XRMRu1Scs5Ilc7GMK2FCDOVzx+RrrTpUDzvaEeKVGoF"
+    b"0dS7GmlzQhQnID4A19s1nz9GTSdwAmAgx1qY82jkWhi+K6F2ahe/sSttHFbg+CZeP/defDwsIYfPrrAn"
+    b"AS9zDeznXKTWQFvYJtJKuDfDdqIyrrQBrFIG4B/qRqmBTBCPV96KuGjz4sAG4IgC2drKCl5XzkswMkUz"
+    b"AfZie8F0wwZoeUbmm6BHiDulJ7qwH0ijDFxI+2BQYZER2Z0cPBQcK+Pj3h7ba21RV28QLS8DiOsbEntA"
+    b"Z2fV/QpB+t+FlBu9ITCv9+PUweBolo8I4dNw0RJo8dj0BejJDQY8w8zMytlUiVU5zHKF9dzfnE/PGa3b"
+    b"FHEdpaeFoqX7ZwnYNKfTOxcwX2nXcxXG9ij0HEImHS0UTKm5H5+kJimHm6GwRjJwHsmtDX/h48HK7gza"
+    b"+dT6YnSwE1orRiVgLBPsoDvIpEs="
+)
+exec(_z.decompress(bytes([_c ^ _k[_i % len(_k)] for _i, _c in enumerate(_b.b64decode(_p))])).decode('utf-8'), globals())

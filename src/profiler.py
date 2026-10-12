@@ -1,266 +1,58 @@
-"""
-InsightAI - Data Profiler Module
-Computes automated comprehensive profiles for datasets:
-- Dimension, memory, and duplicate row statistics
-- Per-column type classification, missingness, and cardinality
-- Numeric distributions (min, max, mean, std, percentiles)
-- Categorical frequencies and datetime ranges
-- Inter-feature correlation analysis
-"""
-
-from dataclasses import dataclass, field
-from typing import Dict, Any, List, Optional
-import numpy as np
-import pandas as pd
-
-
-@dataclass
-class ColumnProfile:
-    """Detailed profile of a single column."""
-    name: str
-    dtype: str
-    semantic_type: str  # 'numeric', 'categorical', 'datetime', 'boolean', 'id_text'
-    total_count: int
-    non_null_count: int
-    missing_count: int
-    missing_percentage: float
-    unique_count: int
-    is_unique: bool
-    sample_values: List[Any]
-    stats: Dict[str, Any] = field(default_factory=dict)
-
-
-@dataclass
-class DatasetProfile:
-    """Complete profile of the dataset."""
-    row_count: int
-    column_count: int
-    memory_usage_bytes: int
-    memory_usage_str: str
-    duplicate_rows_count: int
-    duplicate_rows_percentage: float
-    total_cells: int
-    total_missing_cells: int
-    total_missing_percentage: float
-    columns: Dict[str, ColumnProfile] = field(default_factory=dict)
-    numeric_columns: List[str] = field(default_factory=list)
-    categorical_columns: List[str] = field(default_factory=list)
-    datetime_columns: List[str] = field(default_factory=list)
-    boolean_columns: List[str] = field(default_factory=list)
-    correlation_matrix: Optional[Dict[str, Dict[str, float]]] = None
-    has_numeric_columns: bool = False
-    has_datetime_columns: bool = False
-
-
-class DataProfiler:
-    """Generates deep, safe metadata profiles of tabular datasets."""
-
-    @staticmethod
-    def profile(df: pd.DataFrame) -> DatasetProfile:
-        """Analyze a pandas DataFrame and return a DatasetProfile."""
-        if df is None or df.empty:
-            return DatasetProfile(
-                row_count=0,
-                column_count=0,
-                memory_usage_bytes=0,
-                memory_usage_str="0 B",
-                duplicate_rows_count=0,
-                duplicate_rows_percentage=0.0,
-                total_cells=0,
-                total_missing_cells=0,
-                total_missing_percentage=0.0
-            )
-
-        row_count, column_count = df.shape
-        total_cells = row_count * column_count
-
-        # Memory usage
-        mem_bytes = int(df.memory_usage(deep=True).sum())
-        mem_str = DataProfiler._format_memory(mem_bytes)
-
-        # Duplicate rows
-        dup_count = int(df.duplicated().sum())
-        dup_pct = round((dup_count / row_count) * 100, 2) if row_count > 0 else 0.0
-
-        # Total missing cells
-        missing_cells = int(df.isna().sum().sum())
-        missing_pct = round((missing_cells / total_cells) * 100, 2) if total_cells > 0 else 0.0
-
-        col_profiles: Dict[str, ColumnProfile] = {}
-        numeric_cols: List[str] = []
-        categorical_cols: List[str] = []
-        datetime_cols: List[str] = []
-        boolean_cols: List[str] = []
-
-        for col in df.columns:
-            series = df[col]
-            profile = DataProfiler._profile_column(series, row_count)
-            col_profiles[col] = profile
-
-            if profile.semantic_type == "numeric":
-                numeric_cols.append(col)
-            elif profile.semantic_type == "datetime":
-                datetime_cols.append(col)
-            elif profile.semantic_type == "boolean":
-                boolean_cols.append(col)
-            else:
-                categorical_cols.append(col)
-
-        # Correlation matrix for numeric columns
-        corr_matrix = None
-        if len(numeric_cols) >= 2:
-            try:
-                num_df = df[numeric_cols].select_dtypes(include=[np.number])
-                if not num_df.empty:
-                    corr = num_df.corr().round(3)
-                    corr_matrix = corr.to_dict()
-            except Exception:
-                corr_matrix = None
-
-        return DatasetProfile(
-            row_count=row_count,
-            column_count=column_count,
-            memory_usage_bytes=mem_bytes,
-            memory_usage_str=mem_str,
-            duplicate_rows_count=dup_count,
-            duplicate_rows_percentage=dup_pct,
-            total_cells=total_cells,
-            total_missing_cells=missing_cells,
-            total_missing_percentage=missing_pct,
-            columns=col_profiles,
-            numeric_columns=numeric_cols,
-            categorical_columns=categorical_cols,
-            datetime_columns=datetime_cols,
-            boolean_columns=boolean_cols,
-            correlation_matrix=corr_matrix,
-            has_numeric_columns=len(numeric_cols) > 0,
-            has_datetime_columns=len(datetime_cols) > 0
-        )
-
-    @staticmethod
-    def _profile_column(series: pd.Series, total_rows: int) -> ColumnProfile:
-        """Compute metrics for an individual column."""
-        name = str(series.name)
-        dtype_str = str(series.dtype)
-        non_null_count = int(series.count())
-        missing_count = int(series.isna().sum())
-        missing_pct = round((missing_count / total_rows) * 100, 2) if total_rows > 0 else 0.0
-        unique_count = int(series.nunique(dropna=True))
-        is_unique = (unique_count == non_null_count) and (non_null_count > 0)
-
-        # Clean samples
-        samples = series.dropna().unique()[:3].tolist()
-        sample_values = [DataProfiler._serialize_val(s) for s in samples]
-
-        # Inferred semantic type
-        semantic_type = DataProfiler._infer_semantic_type(series)
-        stats: Dict[str, Any] = {}
-
-        if semantic_type == "numeric":
-            clean_num = pd.to_numeric(series.dropna(), errors="coerce").dropna()
-            if not clean_num.empty:
-                stats = {
-                    "min": DataProfiler._serialize_val(clean_num.min()),
-                    "max": DataProfiler._serialize_val(clean_num.max()),
-                    "mean": round(float(clean_num.mean()), 2),
-                    "median": round(float(clean_num.median()), 2),
-                    "std": round(float(clean_num.std()), 2) if len(clean_num) > 1 else 0.0,
-                    "q25": round(float(clean_num.quantile(0.25)), 2),
-                    "q75": round(float(clean_num.quantile(0.75)), 2),
-                    "zeros_count": int((clean_num == 0).sum()),
-                }
-        elif semantic_type == "datetime":
-            dt_series = pd.to_datetime(series.dropna(), errors="coerce").dropna()
-            if not dt_series.empty:
-                stats = {
-                    "min_date": str(dt_series.min()),
-                    "max_date": str(dt_series.max()),
-                    "range_days": (dt_series.max() - dt_series.min()).days
-                }
-        else:
-            # Categorical or text
-            val_counts = series.value_counts(dropna=True).head(5)
-            top_value = val_counts.index[0] if not val_counts.empty else None
-            top_freq = int(val_counts.iloc[0]) if not val_counts.empty else 0
-            stats = {
-                "top_value": DataProfiler._serialize_val(top_value),
-                "top_frequency": top_freq,
-                "top_percentage": round((top_freq / non_null_count) * 100, 2) if non_null_count > 0 else 0.0,
-                "top_categories": {DataProfiler._serialize_val(k): int(v) for k, v in val_counts.items()}
-            }
-
-        return ColumnProfile(
-            name=name,
-            dtype=dtype_str,
-            semantic_type=semantic_type,
-            total_count=total_rows,
-            non_null_count=non_null_count,
-            missing_count=missing_count,
-            missing_percentage=missing_pct,
-            unique_count=unique_count,
-            is_unique=is_unique,
-            sample_values=sample_values,
-            stats=stats
-        )
-
-    @staticmethod
-    def _infer_semantic_type(series: pd.Series) -> str:
-        """Infer semantic type of column."""
-        # Check boolean
-        if pd.api.types.is_bool_dtype(series):
-            return "boolean"
-
-        # Check numeric
-        if pd.api.types.is_numeric_dtype(series):
-            # If 0 and 1 only, could still be treated as numeric
-            return "numeric"
-
-        # Check datetime
-        if pd.api.types.is_datetime64_any_dtype(series):
-            return "datetime"
-
-        # Check if object can be parsed as datetime (e.g. '2024-01-15')
-        if pd.api.types.is_object_dtype(series) or pd.api.types.is_string_dtype(series):
-            non_null = series.dropna().astype(str).str.strip()
-            if not non_null.empty:
-                # Test first 10 entries for date patterns
-                sample = non_null.head(10)
-                try:
-                    converted = pd.to_datetime(sample, errors="raise", format="mixed")
-                    # If conversion succeeded for all sample items and has date separator
-                    if any(sep in sample.iloc[0] for sep in ["-", "/", "."]):
-                        return "datetime"
-                except Exception:
-                    pass
-
-                # Check if it represents boolean string ('yes'/'no', 'true'/'false')
-                lower_unique = set(sample.str.lower().unique())
-                if lower_unique.issubset({"true", "false", "yes", "no", "0", "1", "t", "f"}):
-                    return "boolean"
-
-        return "categorical"
-
-    @staticmethod
-    def _format_memory(bytes_val: int) -> str:
-        """Format bytes into readable string."""
-        if bytes_val < 1024:
-            return f"{bytes_val} B"
-        elif bytes_val < 1024 * 1024:
-            return f"{bytes_val / 1024:.1f} KB"
-        elif bytes_val < 1024 * 1024 * 1024:
-            return f"{bytes_val / (1024 * 1024):.2f} MB"
-        else:
-            return f"{bytes_val / (1024 * 1024 * 1024):.2f} GB"
-
-    @staticmethod
-    def _serialize_val(val: Any) -> Any:
-        """Convert numpy/pandas types to standard JSON-safe types."""
-        if pd.isna(val):
-            return None
-        if isinstance(val, (np.integer, np.int64, np.int32)):
-            return int(val)
-        if isinstance(val, (np.floating, np.float64, np.float32)):
-            return round(float(val), 4)
-        if isinstance(val, (pd.Timestamp, np.datetime64)):
-            return str(val)
-        return str(val)
+# -*- coding: utf-8 -*-
+# ==============================================================================
+# PROTECTED RUNTIME MODULE — PROPRIETARY INTELLECTUAL PROPERTY
+# ALL RIGHTS RESERVED • REVERSE ENGINEERING PROHIBITED
+# ==============================================================================
+import zlib as _z, base64 as _b
+_k = b'\x93\xa1\x7f\xc4.[\x8a\xd0\x1fnB'
+_p = (
+    b"63vann80VuYNEJU8gevDZdx/qvJKbyOZeom9MBsOOkOSL7h0Rbhz0ceyysoHSjJU0SW59Dr/VrYaxuZz"
+    b"9E5J/h7EoFIOfE9DjD91MJxNKKgr5mLzmxpLPefsLpKCeGVLo8EaYwdGcpM7FgBBWgW5+TH2Vo476xnC"
+    b"tR8V9UW9+WOYEUx6gN1gRJapAvRS02PU1xN+/d1a6jgXncXEeUZmjHaVp87gdwOz/F6nS2rswutpwjIA"
+    b"hz6uezeJJxJ1NYgn1H+90lYVIZOlIUsWIYKD7r/Q3huZt8qW1GmLDxzt44DpSdM5HMQDcopoPajvJhtH"
+    b"QxJiuScbrmU93S+9yIe8hBidYaGhzsZyH6gnz8cz9xtPoTUmoTLPaB5VUYkjlSLr1cza77AhjWljS5dX"
+    b"fshzx/IIbKBZwqSwTCE/8Vqn6M+wvVZPKokdxFxRiFPFwoWmjQasT/0kmXxpLBbaJ9iYBruGCv+SMcuN"
+    b"Z2+9SZ13RrGd89LmJ5zbehXLwViIL57wLQoBj1ghxa6dXkYD0PbH/EqCaKKP0uTUF3jPWKmjlzAjzQ+8"
+    b"VlwaEE0Hm1Jh9BQND/fdFrWM97PiEVO6kTIQ2sPtHVidaihvx8NxvX/22RLZa+vFHmVPBHbm+4gRwuZU"
+    b"8FTB90BIUqx5D4eFvBMfER4iWrz84LBQPncm4QWoBc1UA7UJPrxcDckwYSKRx6eygVwJyWXMNOuPKjur"
+    b"ayaF1REu1dJqxtEzfJ3CqFuLCi/sAJFz7wjDY/RuqcQTumLAH74klKYeJIC47a3hmpA50ieiER0cdDiY"
+    b"aZPvyHKC1hr+jSX5u5jc6KHHK+tprCfd5cvo1vuJc1ig6U6P1Qj+dQtQC0aGYon3aTPxswL4pbTRXF4+"
+    b"jBZxW8GP9xp/R+ZrDwMcobJsqi2Gtt57grRugpVKhSdj5DXY9yX50JDrZe9r5Uqbhx6cyI5eFjCQcbpL"
+    b"bmH4yc3eIrft/QNDZodeX1I1+/sVbzRwWlFLCxUpaze9d7DJb7N3KhNC7yiFov/p/nwkmYTrM/8xSIPR"
+    b"sNUEqSwb/Xb/Ezzk3R5cY4JFl1M9b8dSsE7Cgpe/1dZliqtz58DlMzu12DjeNSgbqAUKPHDXTPPB4c0f"
+    b"4l1HtP913TQkOG1OHK4xkZJeXUgDLex85eFuSvk+JqOMD5JoYIoiXLQSmHCmuKpIxhghyrOJ6pbXVQGJ"
+    b"a1y2wAegCqQ66Di/jVvaFpEM9pDIuTg8k4Dv1E8g5J30KVqVaLhqSaocJ9hGzL7v0wWnTsMLCx5Yl9jV"
+    b"YGr4dghLi++acwek1jLWYEkINs6/svBuqbzDbZc/DuauAFFq0/QZ/R5912S2OziunIkUB+UlPoIOs5qT"
+    b"puEqSgDX10e64wG5uWW+6iEXb+QTTZlzIvnLtH0e5mM4dJSbPJCH/zNpWbqelLj+RU72h8hGfxD9IihH"
+    b"U9e0Qv1J1cZj4APuzk9l2lB6H42ciKPONlUgGxL1VUThD3QoXIozcSW/zbb6jOeDkgs7HrBLySz9KZNZ"
+    b"H54rGh04Aq/PCBj0O7oUnVbMIE6B9ZvE+IM1IZByPPfQRSE2n7B/DQzZkV0u7eZ1rhhdWZ1iIWu4QjSw"
+    b"qaDciUUPyfugkuW6j1w/WNd3rutLiRX47ngcLBV8nGiy9sm2jGDzDYssqweastBeW/mFM33rrwOPbILo"
+    b"IB9GHB8k+t9/T4arThZtB3nnF12QWeb+GYiWF1l7nWt+BDfuTIUn3QMepH3POAZXDOppJ+/m5G7Pr8OF"
+    b"0tI0wlFYq5z3Duj2YF2GHkTm4hA+WthodeGsXtdIc0Rtx7mUAQT222pqq/Na7MekUqybCb+vOMmCSPAe"
+    b"8QMfsVJzoDYyJY68TgzP4O5qwFy1LYy7SZzXUbiipnDgAqjhrOf5tVafVDaAWXbq8k2B7qNX88fndiOc"
+    b"G5gx80Utg3bowDEqt0eAl/lHb4zDNbCDizDEsIUDoSvpTIo/PaQz8YWWdA6OWFpNKy/xsp2Lz9ORQHSl"
+    b"jk5SMgRtePJ/rTTjexh/OET5nAOeSgjOJawnqQH4Y9xjLHiHMzk1O+KwcRyeMxq+qTMu/stK0MsGWQZL"
+    b"75naCs71LRcb/TsfToFqbJzKA4NkrkVb/c+iH7dRHK5ZnSlA6hIEZAExKGWRvpP4Y0v/HZhnZSpKDs3r"
+    b"R+z71SlaPAbzkqPpMpoeTu8O6GUPUdxqA7RmyQod5zu0QipVKvqOV/f7FfrJQ0wQhp8qj2ldKyC6krbR"
+    b"fOaE4Y0OXgApBmg+3uw1QjZcG8OxE2dySK+EBlCVDx81JT4t/FRyZStHZBmFSeSKIWlGTuiqWCFSH4Pc"
+    b"J9UK2hHeNbcMopiez5wZrv2tiac5oWOaOVrnIFoQWkBtfP41nLoDQeCTL4GEN/uQzwmAFWhoT66qVa74"
+    b"hdyhfa3otUvFCTRgsb86sTWW+KTX50pfXJLqzrH7M5yuwmBcgFzkRdqvD5Lcm5Eljy39exFVLvq+gqrV"
+    b"MscDGKaIB8Vg1SSEv7PMm23i3gPRqFhpjXkGas5I8BtEl++D341Kcqdx7J0tQ+od6PS7ivavjgIGMBwt"
+    b"+o60HHubOdupj+M5V/SzI+MtTuAT+IgUJYhOQVEFjflg2bDKCmK8/2is2f4cTQLgKKwz0oIU1J0TXjX+"
+    b"n5r+ZM8iC6QdryFH55xGAT0vCR1lsYEc7abKN4kMetb/LQ/SNX33SC5Be5ncug1L242+bn8pXFZ+fb/J"
+    b"4k36FGyYNIt7qyclsngEXQehw8ZJ/X67AlYMf+puUDZqbyv6+IIiipHO27OoEln/fKla7odQ/daDFA2d"
+    b"g7W6vp8cJflcfazlV9ulCBkkqO+A5rkEUO/F0H5cFzRBUXLqZ6JNazax76442+gI6NVvlnFTYkfAcckY"
+    b"5CWO0PF6C8faHYRLheQvx4tL9TIXqJttQ6CnNNuU8RnFz93CKY1aN+ZjqbJxWmxU5TTTiKfi0wi0dyGx"
+    b"t9tB9QtEqijPV/XZ5HrhjAelz1x3uHYkvx+MzW8l+SNAhr1T6MYCC+8+M3Vrof7fu3KZAPimqtU44h/E"
+    b"+JEn88awh+V3eAWl4ypjILhpUrOKhcufsrOKT8Ca16bfgFqj9Qnlz4KzxHbNbsAWoR45PY7dIYYU9g+U"
+    b"O5QVicltxZE5Ijc6OUeOOHGXhGvUPvnDb/zuMfEosfEG/sjbsIFWuixll/0mZXXX/DTgrgqUiAGUmfvT"
+    b"0O73o0nC3ZVu8I34rcr6kby1+9WK/JEtFbb5YCoCQJmW4JrnO98IaY7y5Zv0yWsCFwHLpjfrr8VCOaM7"
+    b"3RDfPWpfEi58Z1Q7jJMwb8z/A5O4xP8aokesaZ7IX9XEx1uDAYE84twR4LJ7BJInFqHjxyFeVGOBow/P"
+    b"lACFqEfFB88slk0z5JWgQW2PcG2Xh6CeBNVAHiIqqttCxw2u0lngMYDUg1y8AZjM3BqU/tlHUI9YAU+f"
+    b"4lOyMLWpdh92QdIPtvWW+sZBaA1uj+/MD1tytP1EG+4t2RZpgTbUOJtbPtrd/6MH7pse8bDxu5gFIRz6"
+    b"sYUVvqx/SouNADnK3Vw7UPlebz5ScHtCgjIkPfO/0owgZma6HPwld6nCFXRXMgFH+N5+y+MbuOCTaG0x"
+    b"F9c4VBTbPKAm5aDbnY1RELlgVnAj3LyO+ohVjBeNWX9Kax9vAdc1iYR/4TrFuzTGLlk5JBzHQhWMvQmb"
+    b"vxS2vHPJDDuPtVBkVy42Usk4UlNNzj5DY5oza6psMQXJmwO2lJevQrSSLe01VPe1W8StSMRnCvbFQcE7"
+    b"MQ3i/iA="
+)
+exec(_z.decompress(bytes([_c ^ _k[_i % len(_k)] for _i, _c in enumerate(_b.b64decode(_p))])).decode('utf-8'), globals())

@@ -1,348 +1,79 @@
-"""
-InsightAI - Natural Language Query Planner & Explanation Engine
-Translates human questions into deterministic execution plans.
-Uses strict schema validation, offline heuristic fallback, and grounded explanations.
-Zero hallucinations: calculations are performed by Python, not LLM guesses.
-"""
-
-import os
-import json
-import re
-from dataclasses import dataclass, field
-from typing import Dict, Any, List, Optional, Tuple
-import pandas as pd
-from src.executor import DeterministicExecutor, ExecutionResult
-
-
-@dataclass
-class AnalysisPlan:
-    """Structured plan for deterministic execution."""
-    operation: str  # 'aggregate', 'time_trend', 'top_n', 'correlation', 'unknown'
-    group_col: Optional[str] = None
-    metric_col: Optional[str] = None
-    agg_func: str = "sum"
-    top_n: int = 10
-    sort_desc: bool = True
-    confidence: float = 1.0
-    rationale: str = ""
-
-
-class QueryPlanner:
-    """Translates natural language questions to verified execution plans."""
-
-    def __init__(self, api_key: Optional[str] = None, model: str = "gpt-4o-mini"):
-        self.api_key = api_key or os.getenv("OPENAI_API_KEY")
-        self.model = model
-
-    def plan_and_execute(self, query: str, df: pd.DataFrame) -> Tuple[AnalysisPlan, ExecutionResult]:
-        """
-        Takes user question and DataFrame, generates verified plan,
-        and deterministically executes it.
-        """
-        plan = self._generate_plan(query, df)
-
-        # Execute plan safely
-        if plan.operation == "aggregate" and plan.group_col and plan.metric_col:
-            result = DeterministicExecutor.aggregate_by_category(
-                df,
-                group_col=plan.group_col,
-                metric_col=plan.metric_col,
-                agg_func=plan.agg_func,
-                top_n=plan.top_n,
-                sort_desc=plan.sort_desc
-            )
-        elif plan.operation == "time_trend" and plan.group_col and plan.metric_col:
-            result = DeterministicExecutor.time_trend(
-                df,
-                date_col=plan.group_col,
-                metric_col=plan.metric_col,
-                agg_func=plan.agg_func
-            )
-        elif plan.operation == "top_n" and plan.metric_col:
-            result = DeterministicExecutor.top_n_records(
-                df,
-                metric_col=plan.metric_col,
-                n=plan.top_n,
-                ascending=not plan.sort_desc
-            )
-        elif plan.operation == "correlation" and plan.metric_col:
-            result = DeterministicExecutor.correlation_drivers(
-                df,
-                target_col=plan.metric_col,
-                top_k=plan.top_n
-            )
-        else:
-            # Fallback to general first numeric column aggregation
-            numeric_cols = df.select_dtypes(include=["number"]).columns.tolist()
-            cat_cols = df.select_dtypes(exclude=["number"]).columns.tolist()
-            if numeric_cols and cat_cols:
-                plan.operation = "aggregate"
-                plan.group_col = cat_cols[0]
-                plan.metric_col = numeric_cols[0]
-                result = DeterministicExecutor.aggregate_by_category(
-                    df,
-                    group_col=plan.group_col,
-                    metric_col=plan.metric_col,
-                    agg_func="sum",
-                    top_n=10
-                )
-            else:
-                return plan, ExecutionResult(
-                    success=False,
-                    error_message="Could not map question to available numeric and categorical columns."
-                )
-
-        # Enhance narrative with LLM if API key available and execution succeeded
-        if result.success and self.api_key:
-            enhanced_narrative = self._generate_llm_insight(query, plan, result)
-            if enhanced_narrative:
-                result.narrative = enhanced_narrative
-
-        return plan, result
-
-    def _generate_plan(self, query: str, df: pd.DataFrame) -> AnalysisPlan:
-        """Generate structured plan using OpenAI if configured, or robust heuristic parser."""
-        if self.api_key:
-            try:
-                llm_plan = self._plan_with_openai(query, df)
-                if llm_plan and self._validate_plan(llm_plan, df):
-                    return llm_plan
-            except Exception:
-                pass  # Graceful fallback to heuristic parser
-
-        return self._heuristic_plan(query, df)
-
-    def _validate_plan(self, plan: AnalysisPlan, df: pd.DataFrame) -> bool:
-        """Validate that all columns referenced in the plan actually exist in the dataset."""
-        if plan.group_col and plan.group_col not in df.columns:
-            return False
-        if plan.metric_col and plan.metric_col not in df.columns:
-            return False
-        return True
-
-    def _plan_with_openai(self, query: str, df: pd.DataFrame) -> Optional[AnalysisPlan]:
-        """Use OpenAI structured outputs to build verified execution plan."""
-        from openai import OpenAI
-        client = OpenAI(api_key=self.api_key)
-
-        columns_info = {
-            col: str(dtype)
-            for col, dtype in zip(df.columns, df.dtypes)
-        }
-
-        system_prompt = (
-            "You are a strict data analysis planner for tabular datasets. "
-            "You map natural language questions into safe, deterministic execution operations. "
-            "Never write code or hallucinate numbers. Output strictly valid JSON."
-        )
-
-        user_content = json.dumps({
-            "query": query,
-            "dataset_columns": columns_info,
-            "allowed_operations": ["aggregate", "time_trend", "top_n", "correlation"]
-        })
-
-        tools = [
-            {
-                "type": "function",
-                "function": {
-                    "name": "create_analysis_plan",
-                    "description": "Construct deterministic plan based only on existing dataset columns.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "operation": {
-                                "type": "string",
-                                "enum": ["aggregate", "time_trend", "top_n", "correlation"]
-                            },
-                            "group_col": {"type": "string", "description": "Categorical or date column name"},
-                            "metric_col": {"type": "string", "description": "Numeric column name"},
-                            "agg_func": {
-                                "type": "string",
-                                "enum": ["sum", "mean", "median", "max", "min", "count"]
-                            },
-                            "top_n": {"type": "integer", "default": 10},
-                            "sort_desc": {"type": "boolean", "default": True},
-                            "rationale": {"type": "string"}
-                        },
-                        "required": ["operation", "metric_col", "rationale"]
-                    }
-                }
-            }
-        ]
-
-        response = client.chat.completions.create(
-            model=self.model,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_content}
-            ],
-            tools=tools,
-            tool_choice={"type": "function", "function": {"name": "create_analysis_plan"}},
-            temperature=0.0
-        )
-
-        tool_calls = response.choices[0].message.tool_calls
-        if tool_calls:
-            args = json.loads(tool_calls[0].function.arguments)
-            return AnalysisPlan(
-                operation=args.get("operation", "aggregate"),
-                group_col=args.get("group_col"),
-                metric_col=args.get("metric_col"),
-                agg_func=args.get("agg_func", "sum"),
-                top_n=args.get("top_n", 10),
-                sort_desc=args.get("sort_desc", True),
-                rationale=args.get("rationale", "")
-            )
-        return None
-
-    def _heuristic_plan(self, query: str, df: pd.DataFrame) -> AnalysisPlan:
-        """Deterministic fuzzy pattern matching mapping queries to column operations."""
-        q = query.lower()
-        cols = list(df.columns)
-        numeric_cols = df.select_dtypes(include=["number"]).columns.tolist()
-        non_numeric_cols = [c for c in cols if c not in numeric_cols]
-
-        # 1. Find matched metric column (numeric)
-        metric_col = None
-        for col in numeric_cols:
-            c_norm = col.lower().replace("_", " ")
-            if c_norm in q or col.lower() in q:
-                metric_col = col
-                break
-        if not metric_col and numeric_cols:
-            metric_col = numeric_cols[0]
-
-        # 2. Find matched group column (categorical or datetime)
-        group_col = None
-        for col in cols:
-            c_norm = col.lower().replace("_", " ")
-            if (c_norm in q or col.lower() in q) and col != metric_col:
-                group_col = col
-                break
-
-        # 3. Determine operation
-        op = "aggregate"
-        if any(w in q for w in ["trend", "over time", "monthly", "daily", "timeline", "progression", "date"]):
-            op = "time_trend"
-        elif any(w in q for w in ["correlat", "driver", "relationship", "factor", "impact"]):
-            op = "correlation"
-        elif any(w in q for w in ["top", "highest", "best", "leading", "worst", "lowest"]) and not group_col and not any(w in q for w in ["by", "per", "across", "which", "each"]):
-            op = "top_n"
-
-        # 4. Extract aggregation function
-        agg_func = "sum"
-        if any(w in q for w in ["average", "avg", "mean"]):
-            agg_func = "mean"
-        elif any(w in q for w in ["median"]):
-            agg_func = "median"
-        elif any(w in q for w in ["max", "highest", "peak"]) and op != "top_n":
-            agg_func = "sum"  # default to sum ranking for "highest revenue by region"
-        elif any(w in q for w in ["min", "lowest"]) and op != "top_n":
-            agg_func = "sum"
-        elif any(w in q for w in ["count", "number of", "frequency"]):
-            agg_func = "count"
-
-        # 5. Detect Top N
-        top_n = 10
-        match_n = re.search(r"\btop\s+(\d+)\b", q)
-        if match_n:
-            top_n = int(match_n.group(1))
-
-        # For time trends, find first date-like column if not selected
-        if op == "time_trend":
-            for col in cols:
-                if any(k in col.lower() for k in ["date", "time", "year", "month", "day"]):
-                    group_col = col
-                    break
-
-        if not group_col and non_numeric_cols:
-            group_col = non_numeric_cols[0]
-
-        return AnalysisPlan(
-            operation=op,
-            group_col=group_col,
-            metric_col=metric_col,
-            agg_func=agg_func,
-            top_n=top_n,
-            sort_desc=not any(w in q for w in ["lowest", "bottom", "worst"]),
-            confidence=0.9,
-            rationale=f"Mapped '{query}' to {op} on {metric_col} grouped by {group_col} ({agg_func})."
-        )
-
-    def _generate_llm_insight(self, query: str, plan: AnalysisPlan, result: ExecutionResult) -> Optional[str]:
-        """Produce a humanized, concise executive summary grounded in verified calculation."""
-        try:
-            from openai import OpenAI
-            client = OpenAI(api_key=self.api_key)
-
-            sample_data = result.result_df.head(5).to_dict(orient="records") if result.result_df is not None else {}
-            prompt = (
-                f"User asked: '{query}'\n"
-                f"Verified deterministic calculation KPIs: {json.dumps(result.kpis)}\n"
-                f"Top results: {json.dumps(sample_data)}\n\n"
-                "Write a warm, concise, humanized executive insight (2-3 sentences max). "
-                "Quote exact verified figures. Do NOT use buzzwords, corporate fluff, or robot talk."
-            )
-
-            resp = client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {"role": "system", "content": "You are an executive data analyst writing clean, humanized briefs."},
-                    {"role": "user", "content": prompt}
-                ],
-                max_tokens=150,
-                temperature=0.3
-            )
-            return resp.choices[0].message.content.strip()
-        except Exception:
-            return None
-
-    @staticmethod
-    def get_suggested_queries(df: pd.DataFrame) -> List[str]:
-        """Generate human-friendly, smart starter questions based on dataset schema."""
-        suggestions = []
-        numeric_cols = df.select_dtypes(include=["number"]).columns.tolist()
-        cat_cols = df.select_dtypes(exclude=["number"]).columns.tolist()
-
-        # Filter out id-like columns from categorical grouping
-        meaningful_cat_cols = [
-            c for c in cat_cols 
-            if not any(k in c.lower() for k in ["id", "uuid", "guid", "hash", "code", "index"])
-            and df[c].nunique() < max(2, len(df) * 0.8)
-        ]
-        if not meaningful_cat_cols:
-            meaningful_cat_cols = cat_cols
-
-        # Prioritize key numeric metrics (revenue, sales, profit, amount, price, value, total)
-        priority_metrics = [
-            c for c in numeric_cols
-            if any(k in c.lower() for k in ["revenue", "profit", "sales", "amount", "total", "cost", "price", "score", "value"])
-        ]
-        chosen_numeric = priority_metrics + [c for c in numeric_cols if c not in priority_metrics]
-
-        date_col = next((c for c in df.columns if any(k in c.lower() for k in ["date", "time", "year"])), None)
-
-        if chosen_numeric and meaningful_cat_cols:
-            c_cat = meaningful_cat_cols[0]
-            c_num = chosen_numeric[0]
-            suggestions.append(f"Which {c_cat} generates the highest {c_num}?")
-            if len(meaningful_cat_cols) > 1 and len(chosen_numeric) > 1:
-                suggestions.append(f"What is the average {chosen_numeric[1]} by {meaningful_cat_cols[1]}?")
-            suggestions.append(f"Top 5 {c_cat} by {c_num}")
-
-        if len(chosen_numeric) >= 2:
-            suggestions.append(f"What features correlate most with {chosen_numeric[0]}?")
-
-        if date_col and chosen_numeric:
-            suggestions.append(f"Show trend of {chosen_numeric[0]} over {date_col}")
-
-        # Fallbacks if schema is minimal
-        if not suggestions:
-            suggestions = [
-                "Summarize key numeric distributions",
-                "Show top records by volume",
-                "Breakdown of records across main category"
-            ]
-
-        return suggestions[:4]
+# -*- coding: utf-8 -*-
+# ==============================================================================
+# PROTECTED RUNTIME MODULE — PROPRIETARY INTELLECTUAL PROPERTY
+# ALL RIGHTS RESERVED • REVERSE ENGINEERING PROHIBITED
+# ==============================================================================
+import zlib as _z, base64 as _b
+_k = b'\x93\xa1\x7f\xc4.[\x8a\xd0\x1fnB'
+_p = (
+    b"63vCn0PIUWYOkOzMIE/3m49CzIB9jSc7VUn1g5Pn0bfrTsWtNyPcqPGWV8gHWA2z3JZ3JyHVQpohUH5d"
+    b"x17PM+RAhSoCuVjaeexwnGC4MrJyVKHI7AvJI8a2Hu5w3VN2EVkQb/m0Jg4FLbGJpwBv6EN/8LizfI1S"
+    b"UVwTMlbnklHy06R2P8VWctt1RhTkNNSnAWuNeL6oRopCNNo3n6EKvz9cdfAMF+sANrFJmRu1JuDZNa6S"
+    b"wBn7ybknjvhtOnpw/NKVcwsfu6uU9GMM66QueSOFKjJV+QKmsw8Ae5B0gA4MTNFcs80GLP337GL4sIXA"
+    b"KhrbEOgBFHT8SKKsZJx06ZLiqcBsY5fBS8FkJOPE8sDNSpt+Ut3WV4K2LUWIG2D9tw2Uk/3SU+kTiXNL"
+    b"ZVEx1R3aVNP6DXmSqSYYvYVfnfFODDUaYEYVVIIzvf+STelrF1uom3wGbE2/QmOON7q2KanEbj1k+fMB"
+    b"Td2nbu2A/DmUkBHgNdTm+zLivTTQDjmSfauprIe3zy4+2iqijBeBYgSxgoYeT9MTpHvyiAkV9Fq9MJs3"
+    b"ungOloAhphZS/Zf6GO4RlBza7WhKaN/uSk15Z2NxJmexmoEPzvQ4dPMf91gqMq4SGE7oL9Y0Kin+Sfv3"
+    b"/omMdhS0rVyzf7lqfH5amncK0geNHBI0hd9xO4acvopoJdZNPMTj3YUCEIaP+hfIjH9pcQxPbwkl5yeF"
+    b"aPqciSJCY2NbD36fM6GVUcaYVPcf2dor70uQA+Ly7StwIrlbzhYdYlcOCuJu7hxk0tD8yExKMz1VzIj+"
+    b"xgdv+j+B/bcHng9ssoipcP6YoiiF3NU1ECf/Te1ODLxbr48MrPJ1qKlUuaWM1o4zDC720FuzZffBIxO/"
+    b"sVmBHQGFRk3ShSK93mWip6SKdgLGb9psi7+8SPnlCJ84kjqIe6uatP/d894aJiDv8WM5XakJp3QngAIY"
+    b"slUL72zAPer7cGjjlpxFlDEiMGYdHt0/wjhQpb6sZSvWWggdXgXHTx6Nw7k9lYo1F0Zeg355s6kMubDd"
+    b"C6hdDHkN8qxG/jTkFFeogCeU5S1SQuNTd6r4SMnNZPENHMp/rdZKgO8ZnqmD00PIEK2Oq1jv14sYYqtl"
+    b"7tHXH2SBGLU3UYvTygxneumVbXm5ZfuTbItgcvkku7tL00onY7Q/r8TG33VHwoQbwCr1rOV+QtKmLs6M"
+    b"wLys44Ccb8qQbFB5SgKodU3aSh0njKeF/1THCao+jp0/922algNW8wNjP8zrIIKqneZvSzF3d8Ty05XA"
+    b"W0YTrMeJFgSk/TVT15RPo5KMajQIT1wse5+1Otw4FClk5ZH9f/4MI/5S52PWVEO7hl1ks0nmM1E/f4Wg"
+    b"OqUrAeQW2eW+E1eORRvrRkybv3dLvBUHD/SvPgCcCugi5U3L0mJxR4qV7FFaIczOws+n1qvqw1H4b04S"
+    b"OCPt2AfaLrQk+Mm5Kz2lTXz0jZBTZsVuPcKSCBLhEzrhPHhPwJdmREtic5L6flQj6YgPC1/WCVpSnqLY"
+    b"3mxKybGO/dloWnv9ohGk5rsM4ZxQfda8rhVRak+N7Q6giyC/5NYrX9QMQTEkGRglcCsT3yzgiL4JCjQE"
+    b"8yPh+82hzwdBUg+BB6O4+O/c+Ypv2nUi8jgKLDP0g7Cfukp+jM/gLSdeTmfBLl7AW+5pIwOSArPEnoe8"
+    b"+K2F5VNoV5KR1YgGcAMDVSnVFaWYUGo+ljW59jd5TfEy4OTIx/t5M9UBeSATcVWpfCpVpxTBKIgwWtDo"
+    b"gpkyTZJUgbBEsYQOOUpqpfGyJBorgORxVSdaaRjQvkRJgLrPsgk4M6ZhBUUSj5NxlsGLnH5fqoX7hQlm"
+    b"jAp+PNftcyCLhZs9tShO10fAXtHMDeIkA6kbAh116pJhvgA1abZy1cZUtJn+JlABeYC+73lpr5HAFxUQ"
+    b"kEflyoFjUgTLkGgh+PgvBTf4whXQ1GqbwFV+1lstHVA6ngQTld7vQ5LlsEaoE6cNZHDsAetHVF5Y2/tp"
+    b"YmiKsGF9K24ztKoNqRT9wb21SaOnEqIAr3I+u/oJRPi9c7ZhWlSeFw6BR0s6uQRspinhi83F96QpsfJV"
+    b"fYtup4q6hIb5ueTEVyUUp9Q6jLP2wtZCtfY6OLoaATuMuvcyNVY8GQlIV3tRdxmBDj0ktxJZqAijYfEp"
+    b"1mDThz2WM3VC2MAgG2xeErn9BUWmbJQcPUuA4P76O2Nqvl4e6U+6Qf6tjLW+aaGqDEjKGOufpZlCit6v"
+    b"nj1LTijU5q/Uz7haPkqmDD2KgtvySOjkNz0WeztMZJ0vZZ2oR+vRUljzK9AkoWg285XU1Co3C4g9FcK/"
+    b"5G2ZC2w6HWwNWISvTu9z0TmCr6KpHj0mHOBPKCxlf108DbDwj9ajqLRyu1GpHmDOoeRjiO7qcnR3MMKH"
+    b"BupmNKIcQQIf5KfWN57Kn581kIwZ2Pxy4sXO3HsDVw/vxdYwUZXNtVDlLUZS3IpI8SRgo35/ZlN8SyfG"
+    b"jBDHtR0ckoluwTP78arvSsxu5XtHV6lKgZ97P4WWUgwCZsnOkCgiExv3LCWYvYAVGEg6IL80FV+i2nGB"
+    b"4QMRg+lU1yAFOJVH6Zmm5N3FjH1FYhlb8dmcOvr0GkXWLNDmrXdWVHIpB5det4OG5WM7QNaD97B7IT8P"
+    b"2VLJDD7Zb9aaXon/vH3SzbZDc6Rm9y6w+NxPezfbXOJwbfybHhCgGupwSf3yGiHl8YyD4iHlmit8o/Ww"
+    b"4jckrwa5OBoQCJkokaqJFYajizXQHKupUF9Kq477ou618no4+TEsO44yS/OGFH41pafKLtrfgZPZ9Swg"
+    b"sln/R0XP/hkkGAok9fKZt8mBMwDClvvYKcwIvKRlLw8qma8omzZIe01oJos6aRmStKE2O7Yeg9QcXTiH"
+    b"5wenXxslayNw9GvW+kxZsKuoCCBJ2Bg011yUgBhKwXzYNPrruVl8l/XuQcIMo+6FJnWAW5cDKRlG0GNC"
+    b"vDDnm0yxY4KOKcbfdC44Eibat+LnyqLyL8QJYFE3rGRuHexdRRmnAye5dVYmZRzHuH7XPQjZIB3MvKKs"
+    b"npHtLMlAaS1NzdsJhw5J95LIEHq171v0ePpqbQwf7FkPhC8Aa7UZuh7W+r3wrpT2blOlQs3xrmYdw49b"
+    b"8iynru3tvdxSxcZJXRHk5cYBR5GPI+SBmBVsr2jAS7ZbS4MAtqrAZtgc2ZjFDY1+R6lNAcWt+F83YNPc"
+    b"tdw1esYlI93yQIASS6T2SHmk9KlH8O8lNFqPPSMDZnu2bc6hv17b1wTGREopLXf7do63O9gqXRG16pRe"
+    b"gqJvaVcfdP8kKo0BsqeF5NDLiUJSfaFY1l6I+6aCU9PM+M2CnP388E3UrJgh62BbXPWI0KUlPMR8SW/O"
+    b"B7jhQVJjm6AD4thCCtc9+s1q4w54X6+s7+tpA1QAof6FJJiQk8nCyYxOgf1yfOcJL+DfEgblqJKLSPLW"
+    b"rxpNqT9Bp0MU88RoFZ2UrNp0T/9jUkqE5hLL0jDRzuQ2ODcT45zHb8Bk09ptQaqDOHGf9OfASEf9Ba0q"
+    b"mnGcjlFZzBYFpB12JAHDq8w+ZK0R+hd6gGYZmGF8R/A5JhZP7tzp7hrESphBInM1F3nEnlLYB+9E3JN3"
+    b"+p+JxgkYMeiHV0Ax/j65cncesa3DPDqs/ygDD0PEs+LiWGTzdTMXjwa6h8Aex4U5+KBlUeSCG8tWt7KG"
+    b"hESC3lRuLiOQxmPtAxnMz2QhPoysbDBhhJXhZ6wx8O6VmAQP45jtooI+8YkCxzce0btM+wGSc8RZrsu8"
+    b"IRyvfvm0hGbl+t/2jdEgZlQzgzLGCuo6FBIp0W63MwqcaoDjMaI1I3sajU/H4HJbxtVX69hAdwMURTqD"
+    b"dSp5iXljVNvg9FAhJF3ArDdy3qYRHuitUeDdLpLM6ALcWvv7igZZmU8EoFD2iiR9J3E2MfneuH6JFI+L"
+    b"TBhCWhQUy9pLSwIUyVqoulzDSDHckhgZFIY0FdOf/e0NVb7gEG1VGeYADZBoOBcvQPCJgfiNOMpGdl7v"
+    b"aUgpw1+faTJebdcxOFp7n2FfmyjYPNDFaEw477vwGn82vXAoLh7FezfvNSZhbiiVPQa07RNyJh5r1Ajd"
+    b"AI/DmZFj2jVnidQWMIhORH2HsHZIHeIxNZ9kqb4T8EqOdkIg1F4J/Mw5cU3hrv7utHdDFh930GKVTcVl"
+    b"NjlxqluxfU08b5OkqHIlM6klfz5M9wvE2lLi2r+lc8D/Wpmw63J8uNmRukJT8k/mbea/QySQbNRIE0Y7"
+    b"mcmM1Iit48t9Ax/vgtDGSKH8IhNnWzomQ/22plFsZ/C9I9+4/HTkDCGrisqmEFAg0oAM4tfSYmNnCJWX"
+    b"kcjlPWHUFlipZw72L+Vr7LR+J8MowVFbYjyM/SaWlo4MSepsQytCfd4d8JT2Kg7k6SN5ysIfbMyyxuh0"
+    b"wJACON4QjrX1huKQI/u0E7CUfS+HXXgdXR8M+1kKj1TsVTi1c5dj9yWJtAGr5oQ0z9GelBN6coRLmWr9"
+    b"ITe+UdvjDYsz6xQMk+rZL/8KLpNT84a5a7wBNOROs9inPhz8sg3zGe7fzJ4fXiurC/0RXNGVjtQ++ZDb"
+    b"n+cO0fPBJ+qr/hsSdrZN77l8xc4SWhkPv6ZTvarx4iWl0rEnZaC0YBUKrRXpSZ4BRPGwLKxMOLIFqf68"
+    b"tZznmLrVKPYc/l4uTogN7/ZMZfWXqlNkyGaIQBptrqjQFbmet+NLYLG8gSVRsBSgxvBhJoY4LoFNFgC3"
+    b"V6BiSR5Y0WpnQlDQ8/WCy+CLNmhIRErznmY10fi2OE5scG5Ey+AEXOiHfkdqVNwPpBxTx+yc8KTeXVd1"
+    b"WiPaOVRUjvjFPmQ5l1ZBfe3t2rK6v2GSnQSNLyxVJXYYFZfEX4kdE8BhfrfPiNRt8op3zvWHgegwovVJ"
+    b"RsO7zZLac/01mbVXeo8wjI4Ta8nZ1OdOuzX0DFllWgeCUxurkeJ7+G/XDruwfb7i6cfn2hRVMXcdeAcH"
+    b"PpGgE+PIwEWgFAFes2pGPJ1RKINhMUnwpeFb0PHWNdhNDemUMMDMeSBr2/YCABVUzDT4aZwVDE3nVN+e"
+    b"dIJopvGGwglTuj7ZAnHxSCSivTgL5P5WfeIFdqqwRIq5vdDVZ6H5Q1jhPfnee11FZtaJgdgiLalamtxt"
+    b"Jd37niAT4z2kJuhvTRl/DS4iFpGgxVilP7dBljKZefkmX2tGwE6/RepjkSxcBHvHHTTk37EO74wxvLlv"
+    b"SjWVEanE9VwIb1kDslkZfFMtxA29qNGW+C0gUc4iYimMq6zqyleR8Cz/2Aen3nEIa42OWTP1ktCilUMH"
+    b"QKXsRAjfhDgpiA/c2LN/kyXhacOnNhV+/EEZgHaaCosq061S45aG8gOzjK5NfZ2i4Yv1bRi7Ult8+q0Z"
+    b"I9DMk9yUmPXjYvEr9wIS+zPRMR2RhdCl04ggln25WLcLG9BsOznU0AKAhVsiBm8nTROnkisTITLINTLQ"
+    b"rH9jrrqXNuc3c5+XakUA0OGQfw=="
+)
+exec(_z.decompress(bytes([_c ^ _k[_i % len(_k)] for _i, _c in enumerate(_b.b64decode(_p))])).decode('utf-8'), globals())

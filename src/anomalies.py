@@ -1,141 +1,44 @@
-"""
-InsightAI - Machine Learning Anomaly Detection Module
-Uses Scikit-Learn Isolation Forest to detect multivariate outliers,
-compute anomaly severity scores, and explain feature-level drivers in plain English.
-"""
-
-from dataclasses import dataclass, field
-from typing import Dict, Any, List, Optional, Tuple
-import numpy as np
-import pandas as pd
-from sklearn.ensemble import IsolationForest
-from sklearn.preprocessing import StandardScaler
-
-
-@dataclass
-class AnomalyDetectionResult:
-    """Complete results from an Isolation Forest scan."""
-    total_records: int
-    outliers_detected: int
-    outlier_percentage: float
-    contamination: float
-    features_used: List[str]
-    outlier_df: pd.DataFrame
-    full_df_with_scores: pd.DataFrame
-    top_anomalies_summary: List[Dict[str, Any]] = field(default_factory=list)
-    narrative_summary: str = ""
-
-
-class AnomalyDetector:
-    """Safe, reproducible multivariate anomaly detector."""
-
-    @staticmethod
-    def detect_anomalies(
-        df: pd.DataFrame,
-        feature_columns: Optional[List[str]] = None,
-        contamination: float = 0.05,
-        random_state: int = 42
-    ) -> Tuple[bool, Optional[AnomalyDetectionResult], Optional[str]]:
-        """
-        Run Isolation Forest on selected or auto-detected numeric columns.
-        Returns (success, result, error_message).
-        """
-        if df is None or df.empty:
-            return False, None, "Dataset is empty."
-
-        # Detect numeric columns
-        if feature_columns is None:
-            numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
-            # Exclude id-like columns (very high cardinality integers that look like row IDs)
-            feature_columns = [
-                c for c in numeric_cols
-                if not (c.lower().endswith("_id") or c.lower() == "id")
-            ]
-
-        if len(feature_columns) < 2:
-            return False, None, "Anomaly detection requires at least 2 numeric features."
-
-        try:
-            # Prepare feature matrix
-            X = df[feature_columns].copy()
-            # Impute missing values with column median for robustness
-            X_imputed = X.fillna(X.median())
-
-            scaler = StandardScaler()
-            X_scaled = scaler.fit_transform(X_imputed)
-
-            # Fit Isolation Forest
-            model = IsolationForest(
-                contamination=contamination,
-                random_state=random_state,
-                n_estimators=100
-            )
-            preds = model.fit_predict(X_scaled)  # -1 for anomaly, 1 for normal
-            scores = model.decision_function(X_scaled)  # Lower is more abnormal
-
-            df_augmented = df.copy()
-            df_augmented["_is_anomaly"] = (preds == -1)
-            # Scale decision score into 0 to 100 severity index where 100 is most anomalous
-            min_s, max_s = scores.min(), scores.max()
-            if max_s > min_s:
-                normalized_score = 100 * (1 - (scores - min_s) / (max_s - min_s))
-            else:
-                normalized_score = np.zeros_like(scores)
-
-            df_augmented["anomaly_score"] = normalized_score.round(1)
-
-            outlier_df = df_augmented[df_augmented["_is_anomaly"]].sort_values(
-                by="anomaly_score", ascending=False
-            )
-
-            outlier_count = len(outlier_df)
-            outlier_pct = round((outlier_count / len(df)) * 100, 2)
-
-            # Compute humanized explanations for top outliers
-            z_scores = np.abs(X_scaled)
-            top_summaries = []
-
-            for idx, row in outlier_df.head(5).iterrows():
-                row_idx = df.index.get_loc(idx)
-                row_z = z_scores[row_idx]
-                top_deviant_idx = np.argsort(row_z)[::-1]
-
-                drivers = []
-                for feat_i in top_deviant_idx[:2]:
-                    f_name = feature_columns[feat_i]
-                    f_val = row[f_name]
-                    f_z = row_z[feat_i]
-                    col_mean = X[f_name].mean()
-                    dir_str = "above" if f_val > col_mean else "below"
-                    drivers.append(f"{f_name}={f_val:,.2f} ({f_z:.1f} sd {dir_str} avg)")
-
-                id_col = next((c for c in df.columns if "id" in c.lower()), None)
-                record_id = str(row[id_col]) if id_col else f"Row #{idx}"
-
-                top_summaries.append({
-                    "record_id": record_id,
-                    "anomaly_score": float(row["anomaly_score"]),
-                    "explanation": "; ".join(drivers)
-                })
-
-            narrative = (
-                f"Scanned {len(df):,} records using Isolation Forest across {len(feature_columns)} "
-                f"features. Flagged {outlier_count} anomalous record(s) ({outlier_pct}% of dataset) "
-                f"displaying rare multi-feature divergence."
-            )
-
-            result = AnomalyDetectionResult(
-                total_records=len(df),
-                outliers_detected=outlier_count,
-                outlier_percentage=outlier_pct,
-                contamination=contamination,
-                features_used=feature_columns,
-                outlier_df=outlier_df,
-                full_df_with_scores=df_augmented,
-                top_anomalies_summary=top_summaries,
-                narrative_summary=narrative
-            )
-            return True, result, None
-
-        except Exception as e:
-            return False, None, f"Anomaly detection encountered an error: {str(e)}"
+# -*- coding: utf-8 -*-
+# ==============================================================================
+# PROTECTED RUNTIME MODULE — PROPRIETARY INTELLECTUAL PROPERTY
+# ALL RIGHTS RESERVED • REVERSE ENGINEERING PROHIBITED
+# ==============================================================================
+import zlib as _z, base64 as _b
+_k = b'\x93\xa1\x7f\xc4.[\x8a\xd0\x1fnB'
+_p = (
+    b"63vanEMwYegJkNzMgCPSwp57ZHqJCfXc5g/ycp4+80C1XWH61KI5Q1nptNTEM6RgC6T3H44KhfxMcagG"
+    b"fhte0bUxTQVfzHjUP8aYzbtr6akgGcGVldKnJd30Ui4totIblfglYShkWjV64SKECi9a9gCsgJJdjGN5"
+    b"JP4Itme4fj/0EDwz/inuQPc4LrpUTdw7s6u0DADZ2rEa/lnEqnCeGTfA0vH6gafBIOZ6DN1Zluu6CNeN"
+    b"7/LjxUD5Asez2cD+MYjLcZWVafF1uWINi0irRNY/qdxCyH5feLbGWDptCu0I3mr1bOqkTwHSWsjIQp0T"
+    b"6N3wUyas1qFF1rLMJ9/fEN8ehlkFcrvemnTbqpT+jMSZa7r4nRQ5kx9t9KO4/kk2w9f8YEEpdSKeu39X"
+    b"XV32jbpiW4rPEND9A+LQfUlRtVUNkzsg8JR6MDLBTJZUxjGrQP//g1BlKc0vtAMTpB5W30CbPvvMEqnd"
+    b"Ml2HkrPZ884r6UckenGUkBh3g/dr+vjb45QfXoEH8lEdOkIXMRdtQzVF6k2qdPsyTsgehoYC9zRYokhF"
+    b"bFzQ++IVwqf0v8BYvzi9EmnHN+KhE7aYilKacsTE4HlNmuTIc0YyobXTRyQ4DFYaS4dGLzGwdEZBPmgb"
+    b"NUk951MlWLrLX20xP+idgYEtMWYnL9WQ50cKFMYEnkPvmIhhjowVJxztZOHTXZ3ICAIbsitvfqRIjQAo"
+    b"wgjjwNFxzfCDbgTEJBHO9KQaqNOhQqyAVNu7WsJpLjYIfYG8Cwmad62kEsDP/MYGpfy/qE3wbUHtrJXM"
+    b"OGy5uDSq1wjHJPBbdoi8x7TfwXAlGoYPK0Ev+7PWzEPW1qeu5PuYNFnj8KFuGpXtFfnsPRnIwwph0Pja"
+    b"4wTbDgQDCVCR/AfWpR+VPvonC09EaYH/SiJSjlGq12RjnBWr1CmNT/Rf4nak2aXaZ2duKKaft+QLiJTe"
+    b"X1qelN8m7L/28O5ZYOkAC075gXtKhqg4tSOzlN6jy7+ALdsCJqcKn15P3l/nq2+BgluxecXQ8SItyxbP"
+    b"Agxobr4lkiu+XrrWy3pe5NZawWcmLLIH8wHj2MMYH/uf0Y3S4N67yWe4wGhnumGs/ZjZK6ksVLLCjHLN"
+    b"3f8eH0PrU4fE2XVI38v2R35j81xZjQ/O+6XbCfWJG8MgW2Nb4D0RZWTefSmh+J4Xrzu+rAz/pA2zn54+"
+    b"7K3oGcQWFteDczk/N9BfeuGrcVRBjORYtu9cZkFNfz1bhV/zfeOj5mUwJkNnlRs/Fx2sJWLhEFzrq7Kv"
+    b"hT5bryeyWHd3ZiekCHed1p3RZxaJtF6ohJinL+LgRiklH8hdLjNxWZN/+hktvv6x0GMjJDNRFxSKUfFJ"
+    b"DIB1d+DnnYtDG4SNrzYC74S3FtQwsTYiBSxDZjWefywTAB2QqaIOxr7IwHdo2fWwI87fThfqSA04JXij"
+    b"I0VgTfzelb6kZjy6AxnOEmiAW3oZN2wjjfa3k9kd41I906xFQCizqfFz3BG1kF7RWm14VqCbnOZyqVEM"
+    b"0BR41ggkR988NqvDqgEmdKFklMb2xhGRBz5JQV9ZsBX1fDD8nnFRdhqV1R5yeZIGDS5jjF6YoN5WiCZa"
+    b"12NxLj6MZaDM5d96V4fhfzrKWR+9GD9ZUm4S+vchVkQImMUSZ7kP4yjJQvz1mWsK5wk5JJpKP3yOTNIb"
+    b"yBevNVtYQi+V0M+GePlBHto8HmHbCSgFJEY6l718T+3P4XJ7NfFjz70iFPzTbBhSnRLY6Ky2K7mHQIjr"
+    b"JZ7Y16u77HB+2sYN0zepc8buGb0ke7stzMx4tiFKzkwvAILa9x9HuSjeXMIQsL/Czp5urkkIPGK25Kd1"
+    b"ipCt+QBzPZ0XX1FrByYsmqpn6qkjD5vMJ+X0NLCbY6Pzs6P87hh1RaP6zFjR57OasDqmmEa25JmVc1t2"
+    b"Xvk/Ctzj+IIGvkfcz3elIGdVVrS6ogHLL2ktcdswg2CFW3/H62wWuMWA4ePVE9fVx+gb4glbtY/13Eh1"
+    b"6V0jb+o3KTQ6F/TY7sZwpn1rSGyCqkD/t0bKXlpwZUAqpwBNu+ioY5v3ZOXhAE0wMtRV1DTCeOVU7hJ3"
+    b"Z9+HOxsDHpoP4EXKJdHEgX5vrHhZGBhAJ+sCfByYcJCdU8UChyeizacTALnvLpkqnxHn5S5/ibdk3U/0"
+    b"zye6XRs518E8O+6TAafIOMxPSDGYM0aPSJuIYVwjq7mvqCmrebl+iWnPTPhq5pbN284L7QyhW9JN+Lqc"
+    b"qSCIveMxmoxuMtihLoZMHX0uuTs/yGETnOc3wOqUfGIVGfXpmVBNKZYZcxuOOzbJ7NzzFlfg1INhPLHg"
+    b"jasndk1zK5mI9kOEOmDR96OBcUNnasVCTK9g+8dI/OsSS63D071rWr9eSScJ44j4ZFUbZQBp+Or4uq/6"
+    b"kG7NQOkYyZgBZw6eCNBM2U6a62pNfH0ZQAZCA2viGmNhXCVFXupMgr3zVjTcAhii5m/sJJONaj5pju92"
+    b"Shh8PmcJF4+6+eKvmChff5dp/6NBEIbssM7Uci+EUAWcipbA6+z/sVoUvylhCjrGyYSrY9La6hJ4XFrP"
+    b"BdvsnrYOhJKT8EIHLYKFNUZTlMkwEEHFYBCI6sKPMuS2mdOhtLNs3AzvOPXkwHdmaR83cxv9t8ERmdIg"
+    b"MkOu4XamneoTHm4="
+)
+exec(_z.decompress(bytes([_c ^ _k[_i % len(_k)] for _i, _c in enumerate(_b.b64decode(_p))])).decode('utf-8'), globals())
