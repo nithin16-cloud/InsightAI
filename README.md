@@ -2,6 +2,10 @@
 
 **Intelligent Tabular Data Analytics Platform**
 
+[![Live Demo](https://img.shields.io/badge/Live%20Demo-insightai--cloud.streamlit.app-6366F1?style=for-the-badge&logo=streamlit&logoColor=white)](https://insightai-cloud.streamlit.app/)
+
+**Live Application:** [https://insightai-cloud.streamlit.app/](https://insightai-cloud.streamlit.app/)
+
 InsightAI is a production-ready analytics tool that transforms raw CSV files into structured insights without hallucination or black-box guesswork. Every result is produced through deterministic Python execution — no LLM-generated conclusions, no random outputs.
 
 ---
@@ -13,6 +17,7 @@ InsightAI is a production-ready analytics tool that transforms raw CSV files int
 - **Natural Language Query Interface** — Ask questions in plain English ("What is the total revenue by region?") and get exact, auditable answers
 - **ML Anomaly Detection** — Isolation Forest detects genuine multivariate outliers with per-record explanations
 - **Executive HTML Reports** — Download standalone, print-quality HTML reports with full profiling and anomaly summaries
+- **Mobile-Responsive Interface** — Fully optimized for desktop, tablet, and mobile with fluid grids and touch ergonomics
 
 ---
 
@@ -29,6 +34,14 @@ InsightAI is a production-ready analytics tool that transforms raw CSV files int
 
 ---
 
+## Live Deployment
+
+The platform is deployed live on Streamlit Community Cloud:
+
+- **Public URL:** [https://insightai-cloud.streamlit.app/](https://insightai-cloud.streamlit.app/)
+
+---
+
 ## Getting Started
 
 ### Prerequisites
@@ -40,7 +53,7 @@ InsightAI is a production-ready analytics tool that transforms raw CSV files int
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-username/InsightAI.git
+git clone https://github.com/nithin16-cloud/InsightAI.git
 cd InsightAI
 
 # Create and activate a virtual environment
@@ -74,9 +87,9 @@ The app opens at `http://localhost:8501`.
 
 ---
 
-## Deployment
+## Deployment Options
 
-### Streamlit Community Cloud (Recommended)
+### Streamlit Community Cloud (Active)
 
 1. Push this repository to GitHub
 2. Visit [share.streamlit.io](https://share.streamlit.io)
@@ -148,9 +161,3 @@ All tests are deterministic and run offline.
 - **Non-destructive** — The original uploaded file is never modified. Cleaning steps operate on a copy.
 - **Audit-ready** — The query engine logs its exact execution steps, making results fully reproducible.
 - **Privacy-first** — Files are held in memory for the session duration only and never written to disk by default.
-
----
-
-## License
-
-MIT License. See `LICENSE` for details.
